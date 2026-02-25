@@ -68,18 +68,20 @@ def _parse_campaign_info(campaign_name: str) -> tuple[str, str, str]:
     product = parts[3] if len(parts) >= 4 else "미분류"
 
     product_upper = product.upper()
-    if "MO" in product_upper:
+    campaign_upper = str(campaign_name).upper()
+    campaign_lower = str(campaign_name).lower()
+
+    if "MO" in product_upper or "모바일" in product or "모바일" in str(campaign_name):
         device = "MO"
-    elif "PC" in product_upper:
+    elif "PC" in product_upper or "pc" in campaign_lower:
         device = "PC"
     else:
-        campaign_upper = str(campaign_name).upper()
         if "_MO" in campaign_upper:
             device = "MO"
         elif "_PC" in campaign_upper:
             device = "PC"
         else:
-            device = "기타"
+            device = "공통"
 
     return advertiser, product, device
 

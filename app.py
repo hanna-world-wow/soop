@@ -1,7 +1,7 @@
 """
 Streamlit 광고 효율 대시보드
 실행 방법:
-1) 의존성 설치: pip install streamlit pandas numpy plotly
+1) 의존성 설치: pip install -r requirements.txt
 2) 실행: streamlit run app.py
 """
 

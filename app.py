@@ -62,6 +62,8 @@ REQUIRED_COLUMNS = [
 ]
 NUMERIC_COLUMNS = ["노출수", "클릭수", "컴패니언배너클릭수", "동영상조회수", "광고비"]
 PERCENT_COLUMNS = {"CTR(전체)", "VTR"}
+AD_REQUIRED_COLUMNS = ["광고명", "캠페인명", "노출수", "클릭수", "CTR", "CTR(전체)"]
+AD_NUMERIC_COLUMNS = ["노출수", "클릭수", "컴패니언배너클릭수", "광고비"]
 
 
 # --- [2. 데이터 처리 및 유틸리티] ---
@@ -158,6 +160,54 @@ def load_report(file_bytes: bytes, file_name: str) -> pd.DataFrame:
     df["CPV(재계산)"] = (df["광고비"] / df["동영상조회수"].replace(0, pd.NA)).fillna(0)
     df["eCPM(재계산)"] = (df["광고비"] / df["노출수"].replace(0, pd.NA) * 1000).fillna(0)
     return df
+
+def _parse_asset_name(ad_name: str) -> str:
+    parts = str(ad_name).split("_")
+    return parts[-1] if parts else str(ad_name)
+
+
+def load_ad_report(file_bytes: bytes, file_name: str) -> pd.DataFrame:
+    excel_bytes = io.BytesIO(file_bytes)
+    if file_name.lower().endswith(".csv"):
+        df = pd.read_csv(excel_bytes)
+    else:
+        df = pd.read_excel(excel_bytes, header=1)
+
+    df = _normalize_columns(df)
+    missing = _validate_columns(df, AD_REQUIRED_COLUMNS)
+    if missing:
+        raise ValueError(f"광고 단위 파일 필수 컬럼 누락: {', '.join(missing)}")
+
+    for col in AD_NUMERIC_COLUMNS:
+        if col in df.columns:
+            df[col] = df[col].apply(_to_number)
+
+    # CTR 문자열 비율 정규화
+    for col in ["CTR", "CTR(전체)"]:
+        if col in df.columns:
+            df[col] = df[col].apply(_to_number)
+
+    df["애셋구분"] = df["광고명"].apply(_parse_asset_name)
+    grouped = (
+        df.groupby(["캠페인명", "광고상품명", "애셋구분", "광고명"], as_index=False)
+        .agg(
+            노출수=("노출수", "sum"),
+            클릭수=("클릭수", "sum"),
+            총클릭수=("클릭수", "sum"),
+        )
+    )
+    grouped["CTR(전체)"] = (grouped["총클릭수"] / grouped["노출수"].replace(0, pd.NA) * 100).fillna(0)
+
+    # 같은 캠페인 내 광고 2개 이상만 분석 대상
+    counts = grouped.groupby("캠페인명")["광고명"].nunique().reset_index(name="광고수")
+    valid_campaigns = counts[counts["광고수"] > 1]["캠페인명"]
+    grouped = grouped[grouped["캠페인명"].isin(valid_campaigns)].copy()
+
+    if grouped.empty:
+        raise ValueError("광고가 2개 이상인 캠페인이 없습니다. 광고 분석 대상이 없습니다.")
+
+    return grouped.sort_values(["캠페인명", "노출수"], ascending=[True, False])
+
 
 
 # --- [3. 집계 및 요약 함수] ---
@@ -526,17 +576,73 @@ def render_dashboard(df: pd.DataFrame) -> None:
         st.sidebar.warning(f"PDF 생성 실패: {exc}")
 
 
+def render_ad_analysis(ad_df: pd.DataFrame) -> None:
+    st.subheader("🧪 광고 분석")
+    st.caption("같은 캠페인 내 애셋(광고명 마지막 토큰) 성과 비교")
+
+    campaigns = sorted(ad_df["캠페인명"].unique())
+    selected_campaign = st.selectbox("캠페인 선택", campaigns)
+    campaign_df = ad_df[ad_df["캠페인명"] == selected_campaign].copy()
+
+    placements = sorted([p for p in campaign_df["광고상품명"].dropna().unique() if str(p).strip()])
+    if placements:
+        selected_placement = st.selectbox("지면(광고상품명) 선택", placements)
+        campaign_df = campaign_df[campaign_df["광고상품명"] == selected_placement].copy()
+
+    if campaign_df["광고명"].nunique() <= 1:
+        st.info("선택 조건에서 비교할 광고가 2개 미만입니다.")
+        return
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=campaign_df["애셋구분"], y=campaign_df["노출수"], name="노출수"))
+    fig.add_trace(go.Bar(x=campaign_df["애셋구분"], y=campaign_df["클릭수"], name="클릭수"))
+    fig.add_trace(go.Scatter(x=campaign_df["애셋구분"], y=campaign_df["CTR(전체)"], mode="lines+markers", name="CTR(전체)", yaxis="y2"))
+    fig.update_layout(
+        barmode="group",
+        template="plotly_white",
+        title="<b>애셋별 노출/클릭/CTR 비교</b>",
+        xaxis=dict(title="애셋"),
+        yaxis=dict(title="노출수 / 클릭수", tickformat=",.2f", rangemode="tozero"),
+        yaxis2=dict(title="CTR(전체)", overlaying="y", side="right", ticksuffix="%", rangemode="tozero"),
+        margin=dict(l=20, r=20, t=60, b=20),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    display = campaign_df[["애셋구분", "광고명", "노출수", "클릭수", "CTR(전체)"]].copy()
+    display = display.sort_values("노출수", ascending=False).reset_index(drop=True)
+    display.index = display.index + 1
+    display["노출수"] = display["노출수"].map(_format_number)
+    display["클릭수"] = display["클릭수"].map(_format_number)
+    display["CTR(전체)"] = display["CTR(전체)"].map(_format_percent)
+    st.dataframe(display, use_container_width=True)
+
+
 def main() -> None:
     st.sidebar.header("📂 리포트 업로드")
-    upload = st.sidebar.file_uploader("파일을 선택하세요", type=["xlsx", "xls", "csv"])
-    if upload:
-        try:
-            df = load_report(upload.getvalue(), upload.name)
-            render_dashboard(df)
-        except Exception as e:
-            st.error(f"처리 중 오류 발생: {e}")
-    else:
-        st.info("사이드바에서 광고 리포트 파일을 업로드해 주세요.")
+    campaign_upload = st.sidebar.file_uploader("캠페인 리포트 파일", type=["xlsx", "xls", "csv"], key="campaign_upload")
+    ad_upload = st.sidebar.file_uploader("광고 단위 리포트 파일", type=["xlsx", "xls", "csv"], key="ad_upload")
+
+    tab_campaign, tab_ad = st.tabs(["📈 캠페인 통합 리포트", "🧪 광고 분석"])
+
+    with tab_campaign:
+        if campaign_upload:
+            try:
+                df = load_report(campaign_upload.getvalue(), campaign_upload.name)
+                render_dashboard(df)
+            except Exception as e:
+                st.error(f"캠페인 리포트 처리 중 오류 발생: {e}")
+        else:
+            st.info("사이드바에서 캠페인 리포트 파일을 업로드해 주세요.")
+
+    with tab_ad:
+        if ad_upload:
+            try:
+                ad_df = load_ad_report(ad_upload.getvalue(), ad_upload.name)
+                render_ad_analysis(ad_df)
+            except Exception as e:
+                st.error(f"광고 단위 리포트 처리 중 오류 발생: {e}")
+        else:
+            st.info("사이드바에서 광고 단위 리포트 파일을 업로드해 주세요.")
 
 
 if __name__ == "__main__":

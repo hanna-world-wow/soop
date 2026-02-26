@@ -619,8 +619,9 @@ def render_ad_analysis(ad_df: pd.DataFrame) -> None:
 
 def main() -> None:
     st.sidebar.header("📂 리포트 업로드")
-    campaign_upload = st.sidebar.file_uploader("캠페인 리포트 파일", type=["xlsx", "xls", "csv"], key="campaign_upload")
-    ad_upload = st.sidebar.file_uploader("광고 단위 리포트 파일", type=["xlsx", "xls", "csv"], key="ad_upload")
+    st.sidebar.caption("캠페인 단위 파일 + 광고 단위 파일을 각각 업로드할 수 있습니다.")
+    campaign_upload = st.sidebar.file_uploader("캠페인 단위 파일 첨부", type=["xlsx", "xls", "csv"], key="campaign_upload")
+    ad_upload = st.sidebar.file_uploader("광고 단위 파일 첨부", type=["xlsx", "xls", "csv"], key="ad_upload")
 
     tab_campaign, tab_ad = st.tabs(["📈 캠페인 통합 리포트", "🧪 광고 분석"])
 

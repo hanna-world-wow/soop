@@ -260,7 +260,7 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
 
     def normalize_product_name(name: str) -> str:
         s = str(name).strip()
-        s = re.sub(r"\s+", " ", s)
+        s = re.sub(r"\s+", "", s)
         # '_my구좌' 같은 suffix가 있으면 다른 상품으로 유지
         if "_" in s:
             return s
@@ -693,19 +693,18 @@ def main():
             sp_s = promo_prod.sort_values("노출수", ascending=False).head(15)
             fig = go.Figure()
             fig.add_trace(go.Bar(x=sp_s["프로모션명"], y=sp_s["노출수"], name="노출수", marker_color="#2563EB", yaxis="y"))
-            fig.add_trace(go.Bar(x=sp_s["프로모션명"], y=sp_s["총클릭수"], name="총클릭수", marker_color="#16A34A", yaxis="y2"))
+            fig.add_trace(go.Bar(x=sp_s["프로모션명"], y=sp_s["총클릭수"], name="총클릭수", marker_color="#16A34A", yaxis="y"))
             fig.add_trace(go.Scatter(
                 x=sp_s["프로모션명"], y=sp_s["CTR_total"], name="CTR",
                 mode="lines+markers+text", text=[f"{v:.2%}" if pd.notna(v) else "N/A" for v in sp_s["CTR_total"]],
                 textposition="top center", marker=dict(size=7, color="#D97706"),
-                line=dict(color="#D97706", width=2), yaxis="y3"
+                line=dict(color="#D97706", width=2), yaxis="y2"
             ))
             theme(fig, h=320)
             fig.update_layout(
                 xaxis_tickangle=-30,
                 yaxis=dict(title="노출수", tickformat=",.0f"),
-                yaxis2=dict(title="총클릭수", overlaying="y", side="right", showgrid=False, tickformat=",.0f"),
-                yaxis3=dict(overlaying="y", side="right", showgrid=False, showticklabels=False, visible=False),
+                yaxis2=dict(overlaying="y", side="right", showgrid=False, showticklabels=False, visible=False),
                 barmode="group",
             )
             st.plotly_chart(fig, use_container_width=True)
@@ -815,13 +814,14 @@ def main():
         figp = go.Figure()
         top_prod_in_promo = promo_prod_detail.head(15)
         figp.add_trace(go.Bar(x=top_prod_in_promo["광고상품명_정리"], y=top_prod_in_promo["노출수"], name="노출수", marker_color="#2563EB", yaxis="y"))
-        figp.add_trace(go.Scatter(x=top_prod_in_promo["광고상품명_정리"], y=top_prod_in_promo["총클릭수"], name="총클릭수", mode="lines+markers", marker_color="#16A34A", yaxis="y2"))
-        figp.add_trace(go.Scatter(x=top_prod_in_promo["광고상품명_정리"], y=top_prod_in_promo["CTR_total"], name="CTR", mode="text", text=[f"{v:.2%}" if pd.notna(v) else "N/A" for v in top_prod_in_promo["CTR_total"]], textposition="top center", yaxis="y2", showlegend=False))
+        figp.add_trace(go.Bar(x=top_prod_in_promo["광고상품명_정리"], y=top_prod_in_promo["총클릭수"], name="총클릭수", marker_color="#16A34A", yaxis="y"))
+        figp.add_trace(go.Scatter(x=top_prod_in_promo["광고상품명_정리"], y=top_prod_in_promo["CTR_total"], name="CTR", mode="lines+markers+text", text=[f"{v:.2%}" if pd.notna(v) else "N/A" for v in top_prod_in_promo["CTR_total"]], textposition="top center", line=dict(color="#D97706", width=2), marker=dict(size=7, color="#D97706"), yaxis="y2"))
         theme(figp, f"{sel_promo} 내 상품별 노출/클릭", h=300)
         figp.update_layout(
+            barmode="group",
             xaxis_tickangle=-30,
-            yaxis=dict(title="노출수"),
-            yaxis2=dict(title="총클릭수", overlaying="y", side="right", showgrid=False),
+            yaxis=dict(title="노출수/총클릭수", tickformat=",.0f"),
+            yaxis2=dict(overlaying="y", side="right", showticklabels=False, visible=False, showgrid=False),
         )
         st.plotly_chart(figp, use_container_width=True)
 
@@ -1000,7 +1000,7 @@ def main():
                 name="노출수", marker_color="rgba(37,99,235,0.6)", yaxis="y"))
             fig_day.add_trace(go.Bar(
                 x=day_agg["요일"], y=day_agg["총클릭수"],
-                name="총클릭수", marker_color="rgba(22,163,74,0.9)", yaxis="y2"))
+                name="총클릭수", marker_color="rgba(22,163,74,0.9)", yaxis="y"))
             fig_day.add_trace(go.Scatter(
                 x=day_agg["요일"], y=day_agg["CTR_total"],
                 name="CTR(전체)", mode="lines+markers+text",
@@ -1008,13 +1008,12 @@ def main():
                 line=dict(color="#D97706", width=2),
                 text=[f"{v:.2%}" if pd.notna(v) else "N/A" for v in day_agg["CTR_total"]],
                 textposition="top center",
-                yaxis="y3"))
+                yaxis="y2"))
             theme(fig_day, "요일별 노출 · 클릭 · CTR", h=320)
             fig_day.update_layout(
                 barmode="group",
-                yaxis=dict(title="노출수", gridcolor="#F1F5F9", tickformat=",.0f"),
-                yaxis2=dict(title="총클릭수", overlaying="y", side="right", tickformat=",.0f", showgrid=False),
-                yaxis3=dict(overlaying="y", side="right", showticklabels=False, visible=False, showgrid=False),
+                yaxis=dict(title="노출수/총클릭수", gridcolor="#F1F5F9", tickformat=",.0f"),
+                yaxis2=dict(overlaying="y", side="right", showticklabels=False, visible=False, showgrid=False),
             )
             st.plotly_chart(fig_day, use_container_width=True)
 
@@ -1033,21 +1032,20 @@ def main():
             fig_cat.add_trace(go.Bar(x=cat_agg["구분"], y=cat_agg["노출수"],
                 name="노출수", marker_color="#2563EB", yaxis="y"))
             fig_cat.add_trace(go.Bar(x=cat_agg["구분"], y=cat_agg["총클릭수"],
-                name="총클릭수", marker_color="#16A34A", yaxis="y2"))
+                name="총클릭수", marker_color="#16A34A", yaxis="y"))
             fig_cat.add_trace(go.Scatter(
                 x=cat_agg["구분"], y=cat_agg["CTR_total"],
                 name="CTR", mode="lines+markers+text",
                 text=[f"{v:.2%}" if pd.notna(v) else "N/A" for v in cat_agg["CTR_total"]],
                 textposition="top center",
                 line=dict(color="#D97706", width=2), marker=dict(size=7, color="#D97706"),
-                yaxis="y3"
+                yaxis="y2"
             ))
             theme(fig_cat, "구분별 노출수 · 총클릭수", h=260)
             fig_cat.update_layout(
                 barmode="group",
-                yaxis=dict(title="노출수", tickformat=",.0f"),
-                yaxis2=dict(title="총클릭수", overlaying="y", side="right", tickformat=",.0f", showgrid=False),
-                yaxis3=dict(overlaying="y", side="right", showticklabels=False, visible=False, showgrid=False),
+                yaxis=dict(title="노출수/총클릭수", tickformat=",.0f"),
+                yaxis2=dict(overlaying="y", side="right", showticklabels=False, visible=False, showgrid=False),
             )
             st.plotly_chart(fig_cat, use_container_width=True)
 

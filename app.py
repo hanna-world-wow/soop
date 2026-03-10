@@ -113,6 +113,8 @@ section[data-testid="stMain"] > div,
     position: relative;
     overflow: hidden;
     transition: box-shadow 0.2s;
+    min-height: 132px;
+    height: 132px;
 }
 .kpi-wrap:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
 .kpi-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 10px 10px 0 0; }
@@ -255,6 +257,19 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
         errors="coerce")
     for col in ["캠페인명", "광고상품명_정리", "구분"]:
         out[col] = out[col].astype("string").fillna("미분류")
+
+    def normalize_product_name(name: str) -> str:
+        s = str(name).strip()
+        s = re.sub(r"\s+", " ", s)
+        # '_my구좌' 같은 suffix가 있으면 다른 상품으로 유지
+        if "_" in s:
+            return s
+        # 괄호가 문자열 끝에만 붙은 경우 동일 상품으로 통합
+        s = re.sub(r"\s*\([^)]*\)\s*$", "", s).strip()
+        return s
+
+    out["광고상품명_원본"] = out["광고상품명_정리"]
+    out["광고상품명_정리"] = out["광고상품명_정리"].apply(normalize_product_name).astype("string")
     out["프로모션명"] = (
         out["프로모션별"].astype("string").fillna("미분류")
         if "프로모션별" in out.columns else out["캠페인명"].astype("string").fillna("미분류"))
@@ -372,7 +387,15 @@ def theme(fig: go.Figure, title: str = "", h: int = 340) -> go.Figure:
 def fmt(v, mode="num"):
     if pd.isna(v): return "N/A"
     if mode == "pct": return f"{v:.2%}"
-    if mode == "cnt": return f"{v:,.0f}"
+    if mode == "cnt":
+        n = float(v)
+        if abs(n) >= 100_000_000:
+            return f"{n/100_000_000:.1f}억"
+        if abs(n) >= 10_000:
+            return f"{n/10_000:.1f}만"
+        if abs(n) >= 1_000:
+            return f"{n/1_000:.1f}천"
+        return f"{n:,.0f}"
     if mode == "f3":  return f"{v:.3f}"
     return f"{v:,.0f}"
 
@@ -554,23 +577,22 @@ def main():
         # 노출 + CTR 이중 바 (TOP 15)
         with c1:
             sec("TOP 15 — 노출수 & CTR")
-            top15 = prod_agg.nlargest(15, "노출수")[["광고상품명_정리","노출수","CTR_total"]].sort_values("노출수")
+            top15 = prod_agg.nlargest(15, "노출수")[["광고상품명_정리","노출수","총클릭수","CTR_total"]].sort_values("노출수")
             fig = go.Figure()
             fig.add_trace(go.Bar(
                 y=top15["광고상품명_정리"], x=top15["노출수"],
                 name="노출수", orientation="h",
                 marker_color="#2563EB", opacity=0.85, xaxis="x"))
             fig.add_trace(go.Scatter(
-                y=top15["광고상품명_정리"], x=top15["CTR_total"],
-                name="CTR(전체)", mode="markers+text",
-                marker=dict(size=9, color="#D97706", symbol="diamond"),
-                text=[f"{v:.2%}" for v in top15["CTR_total"]],
-                textposition="middle right", xaxis="x2"))
+                y=top15["광고상품명_정리"], x=top15["총클릭수"],
+                name="총클릭수", mode="lines+markers+text", marker=dict(size=7, color="#16A34A"),
+                text=[f"CTR {v:.2%}" if pd.notna(v) else "CTR N/A" for v in top15["CTR_total"]],
+                textposition="middle right", xaxis="x2"
+            ))
             theme(fig, h=420)
             fig.update_layout(
                 xaxis=dict(title="노출수", gridcolor="#F1F5F9"),
-                xaxis2=dict(title="CTR", overlaying="x", side="top",
-                            tickformat=".2%", gridcolor="rgba(0,0,0,0)"),
+                xaxis2=dict(title="총클릭수", overlaying="x", side="top", gridcolor="rgba(0,0,0,0)"),
                 barmode="overlay", legend=dict(x=0.7, y=0.02))
             st.plotly_chart(fig, use_container_width=True)
 
@@ -665,12 +687,14 @@ def main():
             sec("프로모션별 노출 · 클릭")
             sp_s = promo_prod.sort_values("노출수", ascending=False).head(15)
             fig = go.Figure()
-            fig.add_trace(go.Bar(x=sp_s["프로모션명"], y=sp_s["노출수"],
-                name="노출수", marker_color="#2563EB"))
-            fig.add_trace(go.Bar(x=sp_s["프로모션명"], y=sp_s["총클릭수"],
-                name="총클릭수", marker_color="#16A34A"))
+            fig.add_trace(go.Bar(x=sp_s["프로모션명"], y=sp_s["노출수"], name="노출수", marker_color="#2563EB", yaxis="y"))
+            fig.add_trace(go.Scatter(x=sp_s["프로모션명"], y=sp_s["총클릭수"], name="총클릭수", mode="lines+markers", marker_color="#16A34A", yaxis="y2"))
             theme(fig, h=320)
-            fig.update_layout(barmode="group", xaxis_tickangle=-30)
+            fig.update_layout(
+                xaxis_tickangle=-30,
+                yaxis=dict(title="노출수"),
+                yaxis2=dict(title="총클릭수", overlaying="y", side="right", showgrid=False),
+            )
             st.plotly_chart(fig, use_container_width=True)
 
         with c2:
@@ -771,10 +795,15 @@ def main():
 
         figp = go.Figure()
         top_prod_in_promo = promo_prod_detail.head(15)
-        figp.add_trace(go.Bar(x=top_prod_in_promo["광고상품명_정리"], y=top_prod_in_promo["노출수"], name="노출수", marker_color="#2563EB"))
-        figp.add_trace(go.Bar(x=top_prod_in_promo["광고상품명_정리"], y=top_prod_in_promo["총클릭수"], name="총클릭수", marker_color="#16A34A"))
+        figp.add_trace(go.Bar(x=top_prod_in_promo["광고상품명_정리"], y=top_prod_in_promo["노출수"], name="노출수", marker_color="#2563EB", yaxis="y"))
+        figp.add_trace(go.Scatter(x=top_prod_in_promo["광고상품명_정리"], y=top_prod_in_promo["총클릭수"], name="총클릭수", mode="lines+markers", marker_color="#16A34A", yaxis="y2"))
+        figp.add_trace(go.Scatter(x=top_prod_in_promo["광고상품명_정리"], y=top_prod_in_promo["CTR_total"], name="CTR", mode="text", text=[f"{v:.2%}" if pd.notna(v) else "N/A" for v in top_prod_in_promo["CTR_total"]], textposition="top center", yaxis="y2", showlegend=False))
         theme(figp, f"{sel_promo} 내 상품별 노출/클릭", h=300)
-        figp.update_layout(barmode="group", xaxis_tickangle=-30)
+        figp.update_layout(
+            xaxis_tickangle=-30,
+            yaxis=dict(title="노출수"),
+            yaxis2=dict(title="총클릭수", overlaying="y", side="right", showgrid=False),
+        )
         st.plotly_chart(figp, use_container_width=True)
 
         # 동일 업종 평균 대비 성과 비교
@@ -905,6 +934,15 @@ def main():
             yaxis2=dict(title="총클릭수", overlaying="y", side="right",
                         gridcolor="rgba(0,0,0,0)", showgrid=False))
         st.plotly_chart(fig_tot, use_container_width=True)
+
+        st.write("")
+        sec("기간별 노출 광고상품 수")
+        prod_cnt = target.groupby(t_col)["광고상품명_정리"].nunique().reset_index(name="광고상품수")
+        fig_pc = px.bar(prod_cnt, x=t_col, y="광고상품수", text="광고상품수", color_discrete_sequence=["#7C3AED"])
+        theme(fig_pc, "기간별 광고상품 노출 개수", h=220)
+        fig_pc.update_traces(textposition="outside")
+        fig_pc.update_yaxes(title="광고상품 수", tickformat=",.0f")
+        st.plotly_chart(fig_pc, use_container_width=True)
 
         # 월별 요약 테이블 (MoM 포함)
         st.write("")
@@ -1081,6 +1119,16 @@ def main():
             id_d[c] = id_d[c].apply(lambda x: fmt(x, m))
         st.dataframe(id_d.sort_values("CTR_전체(%)", ascending=False),
                      use_container_width=True, hide_index=True)
+
+        sec("업종별 광고주 구성")
+        adv_by_ind = (
+            df.groupby("업종")["광고주"]
+            .agg(lambda s: sorted(set(map(str, s))))
+            .reset_index(name="광고주목록")
+        )
+        adv_by_ind["광고주수"] = adv_by_ind["광고주목록"].apply(len)
+        adv_by_ind["광고주목록"] = adv_by_ind["광고주목록"].apply(lambda x: ", ".join(x[:10]) + (" ..." if len(x) > 10 else ""))
+        st.dataframe(adv_by_ind.sort_values("광고주수", ascending=False), use_container_width=True, hide_index=True)
 
         if covered < 5:
             insight("💡 업종 분류는 광고주명 키워드 기반으로 동작합니다. "

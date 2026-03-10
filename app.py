@@ -195,16 +195,22 @@ DAY_MAP   = {0:"월", 1:"화", 2:"수", 3:"목", 4:"금", 5:"토", 6:"일"}
 
 # 업종 키워드 매핑
 INDUSTRY_KEYWORDS: Dict[str, List[str]] = {
-    "금융·보험":    ["은행","보험","카드","증권","금융","저축","신한","KB","하나","우리","NH","IBK","교보","삼성생명","현대해상"],
-    "통신·IT":      ["KT","SKT","LG유플러스","SK텔레콤","통신","인터넷","네이버","카카오","구글","애플","삼성전자","LG전자"],
-    "유통·이커머스":["쇼핑","마트","백화점","이마트","롯데","현대백화점","쿠팡","11번가","G마켓","옥션","SSG","위메프"],
-    "자동차":       ["자동차","모터스","현대차","기아","BMW","벤츠","아우디","폭스바겐","르노","쌍용","볼보"],
-    "식음료":       ["식품","음료","맥주","소주","커피","제과","롯데칠성","오뚜기","CJ제일제당","농심","빙그레","하이트"],
-    "엔터·미디어":  ["엔터테인먼트","영화","게임","음악","OTT","방송","스튜디오","넷플릭스","왓챠","멜론","지니"],
-    "공공·기관":    ["정부","공단","공사","청","시청","도청","군청","구청","교육부","행정","한국관광","문화재"],
-    "여행·숙박":    ["여행","항공","호텔","리조트","투어","대한항공","아시아나","하나투어","모두투어","야놀자","여기어때"],
-    "패션·뷰티":    ["패션","뷰티","화장품","의류","아모레","LG생활건강","에스티로더","나이키","아디다스","자라"],
-    "의료·헬스":    ["병원","의료","제약","헬스","건강","약","의원","한방","약국","한미약품","유한양행"],
+    "금융·보험": [],
+    "통신·IT": ["소니", "폴라로이드", "ASL로지텍콜라보"],
+    "유통·이커머스": ["네이버스토어", "핫딜", "꽃다발"],
+    "자동차": [],
+    "식음료": [
+        "과자세트", "과자마켓", "과자", "킷캣", "킷켓", "암소갈비", "천의삼", "정원삼",
+        "동원참치", "에브리워터", "오밀당X중앙해장", "네꼬닭", "사과당x여우티",
+    ],
+    "엔터·미디어": [],
+    "공공·기관": [],
+    "여행·숙박": [],
+    "패션·뷰티": ["캘빈클라인", "아미", "아페쎄", "스투시", "듀이셀", "바세린", "헤넬"],
+    "의료·헬스": ["광동멀티비타민", "데이팩"],
+    "특집": ["설기획전", "설선물준비했설", "커부해설문조사", "커부해어울리는브랜드", "커부해스트리머추천"],
+    "굿즈": ["마플샵", "민교교록앵콜", "LCK이벤트", "포토북", "감스트굿즈", "숲다이어리"],
+    "기타": [],
 }
 
 ACCENT_COLORS = ["#2563EB","#16A34A","#D97706","#DC2626","#7C3AED","#0891B2","#DB2777"]
@@ -749,6 +755,68 @@ def main():
             if not wrst_p.empty and len(promo_prod) > 1:
                 insight(f"⚠️ 낮은 효율 프로모션: <strong>{wrst_p.iloc[0]['프로모션명']}</strong> "
                         f"— CTR {wrst_p.iloc[0]['CTR_total']:.2%}", warn=True)
+
+        st.write("")
+        sec("프로모션 기준으로 상품 성과 보기")
+        promo_opts_t2 = sorted(df["프로모션명"].dropna().unique().tolist())
+        sel_promo = st.selectbox("분석할 프로모션", promo_opts_t2, key="t2_promo")
+        promo_rows = df[df["프로모션명"] == sel_promo]
+
+        promo_prod_detail = aggregate(promo_rows, ["광고상품명_정리", "구분"]).sort_values("총클릭수", ascending=False)
+        st.dataframe(
+            promo_prod_detail[["광고상품명_정리", "구분", "노출수", "클릭수", "총클릭수", "CTR_total", "VTR", "노출비중"]],
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        figp = go.Figure()
+        top_prod_in_promo = promo_prod_detail.head(15)
+        figp.add_trace(go.Bar(x=top_prod_in_promo["광고상품명_정리"], y=top_prod_in_promo["노출수"], name="노출수", marker_color="#2563EB"))
+        figp.add_trace(go.Bar(x=top_prod_in_promo["광고상품명_정리"], y=top_prod_in_promo["총클릭수"], name="총클릭수", marker_color="#16A34A"))
+        theme(figp, f"{sel_promo} 내 상품별 노출/클릭", h=300)
+        figp.update_layout(barmode="group", xaxis_tickangle=-30)
+        st.plotly_chart(figp, use_container_width=True)
+
+        # 동일 업종 평균 대비 성과 비교
+        promo_industry_mix = promo_rows.groupby("업종")["노출수"].sum().sort_values(ascending=False)
+        dominant_industry = promo_industry_mix.index[0] if not promo_industry_mix.empty else "기타"
+
+        promo_dom_agg = aggregate(promo_rows[promo_rows["업종"] == dominant_industry], ["프로모션명"])
+        industry_promos = df[df["업종"] == dominant_industry]
+        industry_baseline = aggregate(industry_promos, ["프로모션명"])
+
+        if not promo_dom_agg.empty and not industry_baseline.empty:
+            pr = promo_dom_agg.iloc[0]
+            avg_row = {
+                "노출수": industry_baseline["노출수"].mean(),
+                "총클릭수": industry_baseline["총클릭수"].mean(),
+                "CTR_total": industry_baseline["CTR_total"].mean(),
+                "VTR": industry_baseline["VTR"].mean(),
+            }
+
+            comp = pd.DataFrame(
+                {
+                    "지표": ["노출수", "총클릭수", "CTR_total", "VTR"],
+                    "선택 프로모션": [pr["노출수"], pr["총클릭수"], pr["CTR_total"], pr["VTR"]],
+                    "동일 업종 평균": [avg_row["노출수"], avg_row["총클릭수"], avg_row["CTR_total"], avg_row["VTR"]],
+                }
+            )
+            comp["평균 대비 배율"] = np.where(comp["동일 업종 평균"] > 0, comp["선택 프로모션"] / comp["동일 업종 평균"], np.nan)
+
+            st.caption(f"비교 업종: **{dominant_industry}** (선택 프로모션 내 노출 기준 최대 업종)")
+            st.dataframe(comp, use_container_width=True, hide_index=True)
+
+            fig_comp = go.Figure()
+            fig_comp.add_trace(go.Bar(x=comp["지표"], y=comp["평균 대비 배율"], marker_color="#7C3AED", text=[f"{v:.2f}x" if pd.notna(v) else "N/A" for v in comp["평균 대비 배율"]], textposition="outside"))
+            fig_comp.add_hline(y=1.0, line_dash="dash", line_color="#DC2626", annotation_text="업종 평균 = 1.0x")
+            theme(fig_comp, f"{sel_promo} vs 동일 업종 평균 성과 배율", h=280)
+            fig_comp.update_yaxes(title="배율 (x)")
+            st.plotly_chart(fig_comp, use_container_width=True)
+
+            if comp[comp["지표"] == "CTR_total"]["평균 대비 배율"].iloc[0] >= 1:
+                insight(f"✅ <strong>{sel_promo}</strong>은(는) 업종 평균 대비 CTR이 높습니다.")
+            else:
+                insight(f"⚠️ <strong>{sel_promo}</strong>은(는) 업종 평균 대비 CTR이 낮아 개선 여지가 있습니다.", warn=True)
 
     # ═══════════════════════════════════════════════
     # TAB 3 : 시계열 트렌드 (듀얼 Y축)

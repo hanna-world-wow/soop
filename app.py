@@ -20,20 +20,29 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"], .main .b
     color: #111827 !important;
     font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif !important;
 }
-.report-header { background:#fff; border:1px solid #E5EAF2; border-radius:14px; padding:20px 24px; margin-bottom:16px; }
+[data-testid="stAppViewContainer"] .main .block-container {
+    padding-top: 2.0rem !important;
+    padding-bottom: 2.6rem !important;
+}
+.report-header { background:#fff; border:1px solid #E5EAF2; border-radius:14px; padding:24px 28px; margin-bottom:20px; }
 .report-header h1 { margin:0; color:#165DFF; font-size:24px; font-weight:700; }
-.report-header p { margin:6px 0 0 0; color:#4B5563; font-size:13px; }
-.sec-title { font-size:13px; font-weight:700; color:#1D4ED8; margin:20px 0 10px 0; letter-spacing:0.3px; }
-.kpi-wrap { background:#fff; border:1px solid #E5EAF2; border-radius:12px; padding:14px 14px; min-height:128px; max-height:128px; height:128px; min-width:0; overflow:hidden; }
+.report-header p { margin:8px 0 0 0; color:#4B5563; font-size:13px; }
+.sec-title { font-size:13px; font-weight:700; color:#1D4ED8; margin:24px 0 12px 0; letter-spacing:0.3px; }
+.kpi-wrap {
+    background:#fff; border:1px solid #E5EAF2; border-radius:12px;
+    padding:14px 14px; min-height:128px; max-height:128px; height:128px;
+    min-width:0; overflow:hidden; display:flex; flex-direction:column;
+    justify-content:space-between;
+}
 .kpi-label { font-size:12px; color:#6B7280; font-weight:600; margin-bottom:6px; }
 .kpi-val { font-size:28px; color:#0F172A; font-weight:700; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.kpi-delta-pos { color:#059669; font-size:12px; margin-top:8px; }
-.kpi-delta-neg { color:#DC2626; font-size:12px; margin-top:8px; }
-.kpi-delta-neu { color:#6B7280; font-size:12px; margin-top:8px; }
+.kpi-delta-pos { color:#059669; font-size:12px; margin-top:6px; }
+.kpi-delta-neg { color:#DC2626; font-size:12px; margin-top:6px; }
+.kpi-delta-neu { color:#6B7280; font-size:12px; margin-top:6px; }
 .insight { background:#EFF6FF; border:1px solid #BFDBFE; border-left:4px solid #1D4ED8; border-radius:8px; padding:10px 12px; margin:6px 0; font-size:13px; }
 .insight-warn { background:#FFFBEB; border:1px solid #FCD34D; border-left:4px solid #D97706; border-radius:8px; padding:10px 12px; margin:6px 0; font-size:13px; }
-.stTabs [data-baseweb="tab-list"] { background:#fff; border:1px solid #E5EAF2; border-radius:10px; }
-.stTabs [data-baseweb="tab"] { font-size:13px; }
+.stTabs [data-baseweb="tab-list"] { background:#fff; border:1px solid #E5EAF2; border-radius:10px; padding:4px; gap:6px; }
+.stTabs [data-baseweb="tab"] { font-size:13px; border-radius:8px; padding:8px 12px; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -188,8 +197,8 @@ def apply_meta_theme(fig: go.Figure, title: str = "", h: int = 360) -> go.Figure
         plot_bgcolor="#FFFFFF",
         title=dict(text=title, font=dict(size=15, family="Pretendard, Noto Sans KR, Apple SD Gothic Neo, sans-serif")),
         font=dict(family="Pretendard, Noto Sans KR, Apple SD Gothic Neo, sans-serif", size=12, color="#111827"),
-        margin=dict(l=20, r=20, t=50, b=20),
-        legend=dict(orientation="h", y=1.03, yanchor="bottom", x=0),
+        margin=dict(l=28, r=28, t=70, b=56),
+        legend=dict(orientation="h", y=1.12, yanchor="bottom", x=0, xanchor="left"),
         height=h,
     )
     return fig
@@ -263,21 +272,36 @@ def period_delta(df: pd.DataFrame) -> Dict:
 
 
 def build_volume_click_ctr_chart(dfv: pd.DataFrame, x: str, title: str) -> go.Figure:
+    ctr_series = dfv["CTR_total"].fillna(0)
+    ctr_max = float(ctr_series.max()) if not ctr_series.empty else 0.0
+    ctr_upper = max(0.01, ctr_max * 1.25)
+
     fig = go.Figure()
     fig.add_bar(x=dfv[x], y=dfv["노출수"], name="노출수", marker_color="#2563EB", yaxis="y", hovertemplate="노출수: %{customdata}<extra></extra>", customdata=[fmt_kor_unit(v) for v in dfv["노출수"]])
     fig.add_bar(x=dfv[x], y=dfv["총클릭수"], name="총클릭수", marker_color="#16A34A", yaxis="y2", hovertemplate="총클릭수: %{customdata}<extra></extra>", customdata=[fmt_kor_unit(v) for v in dfv["총클릭수"]])
     fig.add_scatter(
         x=dfv[x], y=dfv["CTR_total"], name="CTR_total", mode="lines+markers+text", line=dict(color="#D97706", width=2), marker=dict(size=7),
-        text=[fmt_pct(v) for v in dfv["CTR_total"]], textposition="top center", hovertemplate="CTR_total: %{text}<extra></extra>", yaxis="y"
+        text=[fmt_pct(v) for v in dfv["CTR_total"]], textposition="top center", hovertemplate="CTR_total: %{text}<extra></extra>",
+        cliponaxis=False,
+        yaxis="y3"
     )
     apply_meta_theme(fig, title, 360)
     y1v, y1t = axis_ticks_from_series(dfv["노출수"])
     y2v, y2t = axis_ticks_from_series(dfv["총클릭수"])
     fig.update_layout(
         barmode="group",
-        xaxis=dict(tickangle=-28),
+        xaxis=dict(tickangle=-28, automargin=True),
         yaxis=dict(title="노출수", tickmode="array", tickvals=y1v, ticktext=y1t, gridcolor="#EEF2F7"),
         yaxis2=dict(title="총클릭수", overlaying="y", side="right", tickmode="array", tickvals=y2v, ticktext=y2t, showgrid=False),
+        yaxis3=dict(
+            overlaying="y",
+            side="right",
+            range=[0, ctr_upper],
+            showticklabels=False,
+            visible=False,
+            showgrid=False,
+            zeroline=False,
+        ),
     )
     return fig
 
@@ -392,10 +416,23 @@ def main():
         figm = go.Figure()
         for i, prm in enumerate(top_promos):
             sub = md[md["프로모션명"] == prm]
-            figm.add_bar(x=sub["연월_str"], y=sub["노출수"], name=ellipsis(prm, 16), marker_color=COLORS[i % len(COLORS)], customdata=[fmt_kor_unit(v) for v in sub["노출수"]], hovertemplate="월: %{x}<br>노출수: %{customdata}<br>CTR_total: %{text}<extra></extra>", text=[fmt_pct(v) for v in sub["CTR_total"]], textposition="none")
+            figm.add_bar(
+                x=sub["연월_str"],
+                y=sub["노출수"],
+                name=ellipsis(prm, 16),
+                marker_color=COLORS[i % len(COLORS)],
+                customdata=np.array([
+                    [fmt_kor_unit(v1), fmt_pct(v2)] for v1, v2 in zip(sub["노출수"], sub["CTR_total"])
+                ], dtype=object),
+                hovertemplate="월: %{x}<br>노출수: %{customdata[0]}<br>CTR_total: %{customdata[1]}<extra></extra>",
+            )
         apply_meta_theme(figm, "월별 노출 비교(CTR은 hover 보조)", 360)
         yv, yt = axis_ticks_from_series(md["노출수"]) if not md.empty else ([0], ["0"])
-        figm.update_layout(barmode="group", yaxis=dict(tickmode="array", tickvals=yv, ticktext=yt, title="노출수"))
+        figm.update_layout(
+            barmode="group",
+            yaxis=dict(tickmode="array", tickvals=yv, ticktext=yt, title="노출수", automargin=True),
+            xaxis=dict(tickangle=-20, automargin=True),
+        )
         st.plotly_chart(figm, use_container_width=True)
 
     with tab3:

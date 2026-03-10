@@ -215,9 +215,6 @@ PLOTLY_THEME = dict(
     plot_bgcolor="#FFFFFF",
     font=dict(family="Pretendard, Apple SD Gothic Neo, sans-serif", color="#1A202C", size=12),
     margin=dict(l=16, r=16, t=44, b=16),
-    xaxis=dict(gridcolor="#F1F5F9", zerolinecolor="#E2E8F0", linecolor="#E2E8F0"),
-    yaxis=dict(gridcolor="#F1F5F9", zerolinecolor="#E2E8F0", linecolor="#E2E8F0"),
-    legend=dict(bgcolor="#FFFFFF", bordercolor="#E2E8F0", borderwidth=1, font=dict(size=11)),
     colorway=ACCENT_COLORS,
 )
 
@@ -560,7 +557,6 @@ def main():
                 text=[f"{v:.2%}" for v in top15["CTR_total"]],
                 textposition="middle right", xaxis="x2"))
             fig.update_layout(
-                **PLOTLY_THEME, height=420,
                 xaxis=dict(title="노출수", gridcolor="#F1F5F9"),
                 xaxis2=dict(title="CTR", overlaying="x", side="top",
                             tickformat=".2%", gridcolor="rgba(0,0,0,0)"),
@@ -797,8 +793,7 @@ def main():
                 line=dict(color=color, width=1.5, dash="dot"),
                 yaxis="y2"))
 
-        fig_dual.update_layout(
-            **PLOTLY_THEME, height=420, hovermode="x unified",
+        fig_dual.update_layout(hovermode="x unified",
             yaxis=dict(
                 title=dict(text=f"◀ {met1}", font=dict(color="#2563EB")),
                 tickformat=".2%" if y1_pct else ",.0f",
@@ -829,7 +824,6 @@ def main():
             line=dict(color="#16A34A", width=2), marker=dict(size=5),
             yaxis="y2"))
         fig_tot.update_layout(
-            **PLOTLY_THEME, height=280,
             yaxis=dict(title="노출수", gridcolor="#F1F5F9"),
             yaxis2=dict(title="총클릭수", overlaying="y", side="right",
                         gridcolor="rgba(0,0,0,0)", showgrid=False))

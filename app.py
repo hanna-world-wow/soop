@@ -30,7 +30,7 @@ st.set_page_config(
 # ─────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
 
 /* ── 전체 기반 ─────────────────────────────── */
 html, body,
@@ -40,7 +40,7 @@ section[data-testid="stMain"] > div,
 .main .block-container {
     background-color: #F0F4F8 !important;
     color: #1A202C !important;
-    font-family: 'Pretendard', 'Apple SD Gothic Neo', sans-serif !important;
+    font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif !important;
 }
 
 /* ── 사이드바 ───────────────────────────────── */
@@ -221,7 +221,7 @@ PLOTLY_THEME = dict(
     template="plotly_white",
     paper_bgcolor="#FFFFFF",
     plot_bgcolor="#FFFFFF",
-    font=dict(family="Pretendard, Apple SD Gothic Neo, sans-serif", color="#1A202C", size=12),
+    font=dict(family="Noto Sans KR, Apple SD Gothic Neo, sans-serif", color="#1A202C", size=12),
     margin=dict(l=16, r=16, t=44, b=16),
     xaxis=dict(gridcolor="#F1F5F9", zerolinecolor="#E2E8F0", linecolor="#E2E8F0"),
     yaxis=dict(gridcolor="#F1F5F9", zerolinecolor="#E2E8F0", linecolor="#E2E8F0"),
@@ -388,16 +388,21 @@ def fmt(v, mode="num"):
     if pd.isna(v): return "N/A"
     if mode == "pct": return f"{v:.2%}"
     if mode == "cnt":
-        n = float(v)
-        if abs(n) >= 100_000_000:
-            return f"{n/100_000_000:.1f}억"
-        if abs(n) >= 10_000:
-            return f"{n/10_000:.1f}만"
-        if abs(n) >= 1_000:
-            return f"{n/1_000:.1f}천"
-        return f"{n:,.0f}"
+        return f"{float(v):,.0f}"
     if mode == "f3":  return f"{v:.3f}"
     return f"{v:,.0f}"
+
+def fmt_kpi_compact(v):
+    if pd.isna(v):
+        return "N/A"
+    n = float(v)
+    if abs(n) >= 100_000_000:
+        return f"{n/100_000_000:.1f}억"
+    if abs(n) >= 10_000:
+        return f"{n/10_000:.1f}만"
+    if abs(n) >= 1_000:
+        return f"{n/1_000:.1f}천"
+    return f"{n:,.0f}"
 
 def period_delta(df: pd.DataFrame) -> Dict:
     months_sorted = sorted(df["연월"].dropna().unique())
@@ -512,11 +517,11 @@ def main():
     cpb        = (total_tclk - total_clk) / total_clk if total_clk else np.nan  # 컴패니언클릭 비율
 
     kpi_defs = [
-        ("노출수",      fmt(total_imp,  "cnt"), "노출수",      "#2563EB"),
-        ("클릭수",      fmt(total_clk,  "cnt"), "클릭수",      "#0891B2"),
-        ("총클릭수",    fmt(total_tclk, "cnt"), "총클릭수",    "#16A34A"),
+        ("노출수",      fmt_kpi_compact(total_imp),  "노출수",      "#2563EB"),
+        ("클릭수",      fmt_kpi_compact(total_clk),  "클릭수",      "#0891B2"),
+        ("총클릭수",    fmt_kpi_compact(total_tclk), "총클릭수",    "#16A34A"),
         ("CTR (전체)",  fmt(ctr_t,      "pct"), "CTR_total",   "#D97706"),
-        ("동영상 조회", fmt(total_vw,   "cnt"), "동영상조회수","#7C3AED"),
+        ("동영상 조회", fmt_kpi_compact(total_vw),   "동영상조회수","#7C3AED"),
         ("VTR",         fmt(vtr,        "pct"), None,          "#DB2777"),
         ("동반클릭율",  fmt(cpb, "pct") if pd.notna(cpb) else "N/A", None, "#DC2626"),
     ]
@@ -688,12 +693,20 @@ def main():
             sp_s = promo_prod.sort_values("노출수", ascending=False).head(15)
             fig = go.Figure()
             fig.add_trace(go.Bar(x=sp_s["프로모션명"], y=sp_s["노출수"], name="노출수", marker_color="#2563EB", yaxis="y"))
-            fig.add_trace(go.Scatter(x=sp_s["프로모션명"], y=sp_s["총클릭수"], name="총클릭수", mode="lines+markers", marker_color="#16A34A", yaxis="y2"))
+            fig.add_trace(go.Bar(x=sp_s["프로모션명"], y=sp_s["총클릭수"], name="총클릭수", marker_color="#16A34A", yaxis="y2"))
+            fig.add_trace(go.Scatter(
+                x=sp_s["프로모션명"], y=sp_s["CTR_total"], name="CTR",
+                mode="lines+markers+text", text=[f"{v:.2%}" if pd.notna(v) else "N/A" for v in sp_s["CTR_total"]],
+                textposition="top center", marker=dict(size=7, color="#D97706"),
+                line=dict(color="#D97706", width=2), yaxis="y3"
+            ))
             theme(fig, h=320)
             fig.update_layout(
                 xaxis_tickangle=-30,
-                yaxis=dict(title="노출수"),
-                yaxis2=dict(title="총클릭수", overlaying="y", side="right", showgrid=False),
+                yaxis=dict(title="노출수", tickformat=",.0f"),
+                yaxis2=dict(title="총클릭수", overlaying="y", side="right", showgrid=False, tickformat=",.0f"),
+                yaxis3=dict(overlaying="y", side="right", showgrid=False, showticklabels=False, visible=False),
+                barmode="group",
             )
             st.plotly_chart(fig, use_container_width=True)
 
@@ -754,19 +767,25 @@ def main():
         sec(f"'{sel_prod}' — 프로모션별 월별 노출·CTR 추이")
         pp_monthly = aggregate(df[df["광고상품명_정리"]==sel_prod], ["연월","프로모션명"]).sort_values("연월")
         if not pp_monthly.empty:
-            c3, c4 = st.columns(2)
-            with c3:
-                fig4 = px.line(pp_monthly, x="연월", y="노출수",
-                    color="프로모션명", markers=True)
-                theme(fig4, "월별 노출수", h=280)
-                fig4.update_yaxes(title="노출수")
-                st.plotly_chart(fig4, use_container_width=True)
-            with c4:
-                fig5 = px.line(pp_monthly, x="연월", y="CTR_total",
-                    color="프로모션명", markers=True)
-                theme(fig5, "월별 CTR(전체)", h=280)
-                fig5.update_yaxes(tickformat=".2%", title="CTR(전체)")
-                st.plotly_chart(fig5, use_container_width=True)
+            figm = go.Figure()
+            for i, pnm in enumerate(sorted(pp_monthly["프로모션명"].unique())):
+                sub = pp_monthly[pp_monthly["프로모션명"] == pnm]
+                color = ACCENT_COLORS[i % len(ACCENT_COLORS)]
+                figm.add_trace(go.Bar(x=sub["연월"], y=sub["노출수"], name=f"{pnm} 노출", marker_color=color, opacity=0.45, yaxis="y"))
+                figm.add_trace(go.Scatter(
+                    x=sub["연월"], y=sub["CTR_total"], name=f"{pnm} CTR",
+                    mode="lines+markers+text",
+                    text=[f"{v:.2%}" if pd.notna(v) else "N/A" for v in sub["CTR_total"]],
+                    textposition="top center",
+                    line=dict(color=color, width=2), marker=dict(size=6), yaxis="y2"
+                ))
+            theme(figm, "월별 노출/CTR 통합", h=320)
+            figm.update_layout(
+                barmode="group",
+                yaxis=dict(title="노출수", tickformat=",.0f"),
+                yaxis2=dict(title="CTR", overlaying="y", side="right", tickformat=".2%", showgrid=False),
+            )
+            st.plotly_chart(figm, use_container_width=True)
 
         # 인사이트
         if not promo_prod.empty:
@@ -936,12 +955,12 @@ def main():
         st.plotly_chart(fig_tot, use_container_width=True)
 
         st.write("")
-        sec("기간별 노출 광고상품 수")
-        prod_cnt = target.groupby(t_col)["광고상품명_정리"].nunique().reset_index(name="광고상품수")
-        fig_pc = px.bar(prod_cnt, x=t_col, y="광고상품수", text="광고상품수", color_discrete_sequence=["#7C3AED"])
-        theme(fig_pc, "기간별 광고상품 노출 개수", h=220)
+        sec("기간별 노출 캠페인 수")
+        prod_cnt = target.groupby(t_col)["캠페인명"].nunique().reset_index(name="캠페인수")
+        fig_pc = px.bar(prod_cnt, x=t_col, y="캠페인수", text="캠페인수", color_discrete_sequence=["#7C3AED"])
+        theme(fig_pc, "기간별 노출 캠페인 개수", h=220)
         fig_pc.update_traces(textposition="outside")
-        fig_pc.update_yaxes(title="광고상품 수", tickformat=",.0f")
+        fig_pc.update_yaxes(title="캠페인 수", tickformat=",.0f")
         st.plotly_chart(fig_pc, use_container_width=True)
 
         # 월별 요약 테이블 (MoM 포함)
@@ -981,19 +1000,22 @@ def main():
                 name="노출수", marker_color="rgba(37,99,235,0.6)", yaxis="y"))
             fig_day.add_trace(go.Bar(
                 x=day_agg["요일"], y=day_agg["총클릭수"],
-                name="총클릭수", marker_color="rgba(22,163,74,0.9)", yaxis="y"))
+                name="총클릭수", marker_color="rgba(22,163,74,0.9)", yaxis="y2"))
             fig_day.add_trace(go.Scatter(
                 x=day_agg["요일"], y=day_agg["CTR_total"],
-                name="CTR(전체)", mode="lines+markers",
+                name="CTR(전체)", mode="lines+markers+text",
                 marker=dict(size=8, color="#D97706"),
                 line=dict(color="#D97706", width=2),
-                yaxis="y2"))
+                text=[f"{v:.2%}" if pd.notna(v) else "N/A" for v in day_agg["CTR_total"]],
+                textposition="top center",
+                yaxis="y3"))
             theme(fig_day, "요일별 노출 · 클릭 · CTR", h=320)
             fig_day.update_layout(
                 barmode="group",
-                yaxis=dict(title="노출수 / 클릭수", gridcolor="#F1F5F9"),
-                yaxis2=dict(title="CTR", overlaying="y", side="right",
-                            tickformat=".2%", showgrid=False))
+                yaxis=dict(title="노출수", gridcolor="#F1F5F9", tickformat=",.0f"),
+                yaxis2=dict(title="총클릭수", overlaying="y", side="right", tickformat=",.0f", showgrid=False),
+                yaxis3=dict(overlaying="y", side="right", showticklabels=False, visible=False, showgrid=False),
+            )
             st.plotly_chart(fig_day, use_container_width=True)
 
             fig_vtr = px.bar(day_agg, x="요일", y="VTR",
@@ -1009,11 +1031,24 @@ def main():
             cat_agg = aggregate(df, ["구분"])
             fig_cat = go.Figure()
             fig_cat.add_trace(go.Bar(x=cat_agg["구분"], y=cat_agg["노출수"],
-                name="노출수", marker_color="#2563EB"))
+                name="노출수", marker_color="#2563EB", yaxis="y"))
             fig_cat.add_trace(go.Bar(x=cat_agg["구분"], y=cat_agg["총클릭수"],
-                name="총클릭수", marker_color="#16A34A"))
+                name="총클릭수", marker_color="#16A34A", yaxis="y2"))
+            fig_cat.add_trace(go.Scatter(
+                x=cat_agg["구분"], y=cat_agg["CTR_total"],
+                name="CTR", mode="lines+markers+text",
+                text=[f"{v:.2%}" if pd.notna(v) else "N/A" for v in cat_agg["CTR_total"]],
+                textposition="top center",
+                line=dict(color="#D97706", width=2), marker=dict(size=7, color="#D97706"),
+                yaxis="y3"
+            ))
             theme(fig_cat, "구분별 노출수 · 총클릭수", h=260)
-            fig_cat.update_layout(barmode="group")
+            fig_cat.update_layout(
+                barmode="group",
+                yaxis=dict(title="노출수", tickformat=",.0f"),
+                yaxis2=dict(title="총클릭수", overlaying="y", side="right", tickformat=",.0f", showgrid=False),
+                yaxis3=dict(overlaying="y", side="right", showticklabels=False, visible=False, showgrid=False),
+            )
             st.plotly_chart(fig_cat, use_container_width=True)
 
             ca_s = cat_agg.sort_values("CTR_total", ascending=False)

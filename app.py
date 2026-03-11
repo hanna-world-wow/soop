@@ -573,10 +573,49 @@ def main():
                     marker=dict(size=np.clip(np.sqrt(plot_b["총클릭수"].fillna(0)) * 2.5, 12, 55), color="#2563EB", opacity=0.55, line=dict(color="#1D4ED8", width=1)),
                 )
             )
-            fig_bubble.add_annotation(x=x_left, y=med_y + (y_max - med_y) * 0.72, text="테스트 확대", showarrow=False, font=dict(size=11, color="#1E3A8A"), layer="above")
-            fig_bubble.add_annotation(x=x_right, y=med_y + (y_max - med_y) * 0.72, text="확대 후보 ★", showarrow=False, font=dict(size=11, color="#065F46"), layer="above")
-            fig_bubble.add_annotation(x=x_right, y=max(y_min, med_y * 0.35), text="개선 우선", showarrow=False, font=dict(size=11, color="#9A3412"), layer="above")
-            fig_bubble.add_annotation(x=x_left, y=max(y_min, med_y * 0.35), text="집행 축소 검토", showarrow=False, font=dict(size=11, color="#991B1B"), layer="above")
+            x_min_range, x_max_range = 0.0, x_max * 1.05
+            y_min_range, y_max_range = y_min, y_max * 1.15
+
+            def clamp(v: float, lo: float, hi: float) -> float:
+                return max(lo, min(v, hi))
+
+            label_style = dict(showarrow=False, borderpad=3, borderwidth=1, opacity=0.98)
+            fig_bubble.add_annotation(
+                x=clamp(x_left, x_min_range, x_max_range),
+                y=clamp(med_y + (y_max - med_y) * 0.72, y_min_range, y_max_range),
+                text="테스트 확대",
+                font=dict(size=11, color="#1E3A8A"),
+                bgcolor="rgba(219,234,254,0.92)",
+                bordercolor="#93C5FD",
+                **label_style,
+            )
+            fig_bubble.add_annotation(
+                x=clamp(x_right, x_min_range, x_max_range),
+                y=clamp(med_y + (y_max - med_y) * 0.72, y_min_range, y_max_range),
+                text="확대 후보 ★",
+                font=dict(size=11, color="#065F46"),
+                bgcolor="rgba(209,250,229,0.92)",
+                bordercolor="#6EE7B7",
+                **label_style,
+            )
+            fig_bubble.add_annotation(
+                x=clamp(x_right, x_min_range, x_max_range),
+                y=clamp(max(y_min, med_y * 0.35), y_min_range, y_max_range),
+                text="개선 우선",
+                font=dict(size=11, color="#9A3412"),
+                bgcolor="rgba(255,237,213,0.93)",
+                bordercolor="#FDBA74",
+                **label_style,
+            )
+            fig_bubble.add_annotation(
+                x=clamp(x_left, x_min_range, x_max_range),
+                y=clamp(max(y_min, med_y * 0.35), y_min_range, y_max_range),
+                text="집행 축소 검토",
+                font=dict(size=11, color="#991B1B"),
+                bgcolor="rgba(254,226,226,0.93)",
+                bordercolor="#FCA5A5",
+                **label_style,
+            )
             apply_meta_theme(fig_bubble, "상품 포지셔닝 매트릭스 (X:노출, Y:CTR_total, 버블:클릭수)", 480)
             xv, xt = make_kor_ticks(float(plot_b["노출수"].max()))
             yv, yt = make_pct_ticks(float(plot_b["CTR_total"].max()) if not plot_b.empty else 0.01)

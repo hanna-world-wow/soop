@@ -34,6 +34,7 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"], .main .b
     min-width:0; overflow:hidden; display:flex; flex-direction:column;
     justify-content:space-between;
 }
+.kpi-wrap:hover { border-color: #2563EB; box-shadow: 0 2px 10px rgba(37,99,235,0.12); transition: all 0.18s ease; cursor: default; }
 .kpi-label { font-size:12px; color:#6B7280; font-weight:600; margin-bottom:6px; }
 .kpi-val { font-size:28px; color:#0F172A; font-weight:700; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .kpi-delta-pos { color:#059669; font-size:12px; margin-top:6px; }
@@ -48,29 +49,20 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"], .main .b
     unsafe_allow_html=True,
 )
 
-REQUIRED_COLUMNS = [
-    "캠페인명", "일자", "노출수", "클릭수", "컴패니언배너클릭수", "총클릭수", "동영상조회수",
-    "CTR", "CTR(전체)", "VTR", "광고비", "eCPM", "CPC", "CPV", "연도", "월", "광고상품명_정리",
-    "구분", "프로모션별", "광고주",
-]
-NUMERIC_COLUMNS = [
-    "노출수", "클릭수", "컴패니언배너클릭수", "총클릭수", "동영상조회수",
-    "CTR", "CTR(전체)", "VTR", "광고비", "eCPM", "CPC", "CPV", "연도", "월",
-]
+REQUIRED_COLUMNS = ["프로모션별", "캠페인명", "일자", "노출수", "클릭수", "라이브일자", "연도", "월", "광고상품명_정리", "구분", "광고주"]
+NUMERIC_COLUMNS = ["노출수", "클릭수", "연도", "월"]
 DAY_ORDER = ["월", "화", "수", "목", "금", "토", "일"]
 DAY_MAP = {0: "월", 1: "화", 2: "수", 3: "목", 4: "금", 5: "토", 6: "일"}
-COLORS = ["#2563EB", "#1E40AF", "#16A34A", "#D97706", "#7C3AED", "#0891B2", "#DB2777"]
+COLORS = ["#2563EB", "#1E40AF", "#16A34A", "#D97706", "#7C3AED", "#0891B2", "#DB2777", "#0EA5E9"]
 
-INDUSTRY_KEYWORDS: Dict[str, List[str]] = {
-    "금융·보험": [], "통신·IT": ["소니", "폴라로이드", "ASL로지텍콜라보"], "유통·이커머스": ["네이버스토어", "핫딜", "꽃다발"],
-    "자동차": [],
-    "식음료": ["과자", "킷캣", "킷켓", "암소갈비", "동원참치", "에브리워터", "네꼬닭", "사과당x여우티", "오밀당x중앙해장"],
-    "엔터·미디어": [], "공공·기관": [], "여행·숙박": [],
-    "패션·뷰티": ["캘빈클라인", "아미", "아페쎄", "스투시", "듀이셀", "바세린", "헤넬"],
+INDUSTRY_KEYWORDS = {
+    "패션·뷰티": ["캘빈클라인", "아미", "아페쎄", "스투시", "듀이셀", "바세린", "헤넬", "언더웨어"],
+    "식음료": ["과자세트", "과자마켓", "과자", "킷캣", "킷켓", "암소갈비", "동원참치", "에브리워터", "네꼬닭", "사과당x여우티", "사과당X여우티", "오밀당X중앙해장", "오밀당x중앙해장", "삼겹살", "링티", "갈비", "건어물", "더블크런치", "순대국밥", "덴마크"],
+    "통신·IT": ["소니", "폴라로이드", "ASL로지텍콜라보", "asl로지텍"],
     "의료·헬스": ["광동멀티비타민", "데이팩", "정원삼", "천의삼"],
-    "특집": ["설기획전", "커부해", "설선물준비했설", "숲다이어리"],
-    "굿즈": ["마플샵", "포토북", "감스트굿즈", "민교교록앵콜", "lck이벤트"],
-    "기타": [],
+    "굿즈·이벤트": ["마플샵", "포토북", "감스트굿즈", "민교교록앵콜", "LCK이벤트", "lck이벤트", "봉준"],
+    "유통·이커머스": ["네이버스토어", "꽃다발", "핫딜", "커머스를부탁해"],
+    "특집·기획": ["설기획전", "설선물준비했설", "숲다이어리", "커부해", "커부해어울리는브랜드", "커부해스트리머추천", "커부해설문조사"],
 }
 
 
@@ -99,25 +91,48 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     for c in REQUIRED_COLUMNS:
         if c not in out.columns:
             out[c] = np.nan
+
     out["일자"] = pd.to_datetime(out["일자"], errors="coerce")
+    out["라이브일자"] = pd.to_datetime(out["라이브일자"], errors="coerce")
+
     for c in NUMERIC_COLUMNS:
         out[c] = pd.to_numeric(out[c], errors="coerce")
+
+    out["광고상품명_정리"] = out["광고상품명_정리"].astype(str).str.strip()
+    out["광고상품명_원본"] = out["광고상품명_정리"]
+    out["광고상품명_정리"] = out["광고상품명_정리"].apply(normalize_product_name)
+
+    out["구분"] = out["구분"].astype(str).str.strip()
+    out["광고주"] = out["광고주"].astype(str).str.strip()
+    out["캠페인명"] = out["캠페인명"].astype(str).fillna("미분류")
+    out["프로모션별"] = out["프로모션별"].astype(str).fillna("미분류")
+    out["프로모션명"] = out["프로모션별"].astype(str).fillna("미분류")
+
+    out["노출수"] = pd.to_numeric(out["노출수"], errors="coerce").fillna(0)
+    out["클릭수"] = pd.to_numeric(out["클릭수"], errors="coerce").fillna(0)
+    out["총클릭수"] = out["클릭수"]
+    out["컴패니언배너클릭수"] = 0
+    out["동영상조회수"] = 0
+    out["is_video"] = out["광고상품명_정리"].str.contains("인스트림", na=False)
+
     out["요일"] = out["일자"].dt.weekday.map(DAY_MAP)
     out["연도"] = out["연도"].fillna(out["일자"].dt.year)
     out["월"] = out["월"].fillna(out["일자"].dt.month)
-    out["연월"] = pd.to_datetime(dict(year=out["연도"].astype("Int64"), month=out["월"].astype("Int64"), day=1), errors="coerce")
-    out["광고상품명_원본"] = out["광고상품명_정리"].astype("string")
-    out["광고상품명_정리"] = out["광고상품명_정리"].astype("string").fillna("미분류").apply(normalize_product_name)
-    out["프로모션명"] = out["프로모션별"].astype("string").fillna(out["캠페인명"].astype("string").fillna("미분류"))
-    out["광고주"] = out["광고주"].astype("string").fillna("미분류")
-    for c in ["노출수", "클릭수", "총클릭수", "동영상조회수", "컴패니언배너클릭수"]:
-        out[c] = out[c].fillna(0)
-    out["총클릭수"] = out["총클릭수"].where(out["총클릭수"] > 0, out["클릭수"])
+    out["연월"] = pd.NaT
+    valid_mask = out["연도"].notna() & out["월"].notna()
+    out.loc[valid_mask, "연월"] = pd.to_datetime(
+        dict(
+            year=out.loc[valid_mask, "연도"].astype(int),
+            month=out.loc[valid_mask, "월"].astype(int),
+            day=1,
+        ),
+        errors="coerce",
+    )
 
     def classify(v: str) -> str:
-        u = re.sub(r"\s+", "", str(v)).upper()
+        n = re.sub(r"\s+", "", str(v)).upper()
         for ind, kws in INDUSTRY_KEYWORDS.items():
-            if any(re.sub(r"\s+", "", k).upper() in u for k in kws):
+            if any(re.sub(r"\s+", "", k).upper() in n for k in kws):
                 return ind
         return "기타"
 
@@ -129,8 +144,13 @@ def safe_div(a: pd.Series, b: pd.Series) -> pd.Series:
     return a / b.replace(0, np.nan)
 
 
-def aggregate(df: pd.DataFrame, by: List[str]) -> pd.DataFrame:
-    g = df.groupby(by, dropna=False, as_index=False)[["노출수", "클릭수", "컴패니언배너클릭수", "총클릭수", "동영상조회수"]].sum(min_count=1).fillna(0)
+@st.cache_data(show_spinner=False)
+def aggregate(df: pd.DataFrame, by: tuple) -> pd.DataFrame:
+    g = (
+        df.groupby(list(by), dropna=False, as_index=False)[["노출수", "클릭수", "컴패니언배너클릭수", "총클릭수", "동영상조회수"]]
+        .sum(min_count=1)
+        .fillna(0)
+    )
     g["CTR"] = safe_div(g["클릭수"], g["노출수"])
     g["CTR_total"] = safe_div(g["총클릭수"], g["노출수"])
     g["VTR"] = safe_div(g["동영상조회수"], g["노출수"])
@@ -168,11 +188,11 @@ def fmt_kor_unit(v) -> str:
     sign = "-" if n < 0 else ""
     n = abs(n)
     if n >= 100_000_000:
-        return f"{sign}{n/100_000_000:.1f}억"
+        return f"{sign}{n / 100_000_000:.1f}억"
     if n >= 10_000:
-        return f"{sign}{n/10_000:.1f}만"
+        return f"{sign}{n / 10_000:.1f}만"
     if n >= 1_000:
-        return f"{sign}{n/1_000:.1f}천"
+        return f"{sign}{n / 1_000:.1f}천"
     return f"{sign}{n:,.0f}"
 
 
@@ -183,16 +203,6 @@ def fmt_kpi_compact(v) -> str:
 def ellipsis(v: str, n: int = 16) -> str:
     s = str(v)
     return s if len(s) <= n else s[: n - 1] + "…"
-
-
-def axis_ticks_from_series(s: pd.Series, bins: int = 5) -> Tuple[List[float], List[str]]:
-    if s.empty:
-        return [0], ["0"]
-    vmax = float(np.nanmax(np.abs(s.values))) if s.notna().any() else 0
-    if vmax == 0:
-        return [0], ["0"]
-    vals = np.linspace(0, vmax, bins)
-    return vals.tolist(), [fmt_kor_unit(v) for v in vals]
 
 
 def nice_axis_max(vmax: float, pad: float = 0.15) -> float:
@@ -233,8 +243,8 @@ def apply_meta_theme(fig: go.Figure, title: str = "", h: int = 360) -> go.Figure
         plot_bgcolor="#FFFFFF",
         title=dict(text=title, font=dict(size=15, family="Pretendard, Noto Sans KR, Apple SD Gothic Neo, sans-serif")),
         font=dict(family="Pretendard, Noto Sans KR, Apple SD Gothic Neo, sans-serif", size=12, color="#111827"),
-        margin=dict(l=28, r=28, t=72, b=140),
-        legend=dict(orientation="h", y=-0.32, yanchor="top", x=0, xanchor="left", itemwidth=80),
+        margin=dict(l=28, r=28, t=100, b=160),
+        legend=dict(orientation="h", y=-0.42, yanchor="top", x=0, xanchor="left"),
         height=h,
     )
     return fig
@@ -251,83 +261,6 @@ def apply_month_axis(fig: go.Figure, months: List[str], angle: int = -28):
         tickangle=angle,
         automargin=True,
     )
-
-
-def summarize_period(df: pd.DataFrame) -> Dict[str, float]:
-    imp = df["노출수"].sum()
-    clk = df["클릭수"].sum()
-    tclk = df["총클릭수"].sum()
-    vw = df["동영상조회수"].sum()
-    return {
-        "노출수": imp,
-        "클릭수": clk,
-        "총클릭수": tclk,
-        "CTR_total": (tclk / imp) if imp > 0 else np.nan,
-        "동영상조회수": vw,
-        "VTR": (vw / imp) if imp > 0 else np.nan,
-        "광고상품수": df.loc[df["노출수"] > 0, "광고상품명_정리"].nunique(),
-        "캠페인수": df.loc[df["노출수"] > 0, "캠페인명"].nunique(),
-    }
-
-
-def period_product_compare(df_a: pd.DataFrame, df_b: pd.DataFrame, min_imp: int) -> pd.DataFrame:
-    a = aggregate(df_a, ["광고상품명_정리"])[["광고상품명_정리", "노출수", "총클릭수", "CTR_total", "VTR"]]
-    b = aggregate(df_b, ["광고상품명_정리"])[["광고상품명_정리", "노출수", "총클릭수", "CTR_total", "VTR"]]
-    a = a.rename(columns={"노출수": "A_노출수", "총클릭수": "A_총클릭수", "CTR_total": "A_CTR", "VTR": "A_VTR"})
-    b = b.rename(columns={"노출수": "B_노출수", "총클릭수": "B_총클릭수", "CTR_total": "B_CTR", "VTR": "B_VTR"})
-    m = a.merge(b, on="광고상품명_정리", how="outer").fillna(0)
-    m["노출 증감"] = m["B_노출수"] - m["A_노출수"]
-    m["클릭 증감"] = m["B_총클릭수"] - m["A_총클릭수"]
-    m["CTR 변화(%p)"] = (m["B_CTR"] - m["A_CTR"]) * 100
-    m["VTR 변화(%p)"] = (m["B_VTR"] - m["A_VTR"]) * 100
-    m["해석상태"] = np.where((m["A_노출수"] < min_imp) | (m["B_노출수"] < min_imp), "표본부족", "분석가능")
-    return m.sort_values("노출 증감", ascending=False)
-
-
-def promotion_product_compare(df_a: pd.DataFrame, df_b: pd.DataFrame, min_imp: int) -> pd.DataFrame:
-    a = aggregate(df_a, ["광고상품명_정리"])[["광고상품명_정리", "노출수", "총클릭수", "CTR_total", "VTR"]]
-    b = aggregate(df_b, ["광고상품명_정리"])[["광고상품명_정리", "노출수", "총클릭수", "CTR_total", "VTR"]]
-    a = a.rename(columns={"노출수": "A_노출수", "총클릭수": "A_총클릭수", "CTR_total": "A_CTR", "VTR": "A_VTR"})
-    b = b.rename(columns={"노출수": "B_노출수", "총클릭수": "B_총클릭수", "CTR_total": "B_CTR", "VTR": "B_VTR"})
-    m = a.merge(b, on="광고상품명_정리", how="outer").fillna(0)
-    m["노출 증감"] = m["B_노출수"] - m["A_노출수"]
-    m["총클릭 증감"] = m["B_총클릭수"] - m["A_총클릭수"]
-    m["CTR 변화(%p)"] = (m["B_CTR"] - m["A_CTR"]) * 100
-    m["VTR 변화(%p)"] = (m["B_VTR"] - m["A_VTR"]) * 100
-    m["해석상태"] = np.where((m["A_노출수"] < min_imp) | (m["B_노출수"] < min_imp), "표본부족", "분석가능")
-    return m.sort_values("노출 증감", ascending=False)
-
-
-def delta_sentence_count(a: float, b: float) -> str:
-    d = b - a
-    if abs(d) < 1e-9:
-        return "A와 B가 동일"
-    return f"B가 A보다 {fmt_kor_unit(abs(d))} {'큼' if d > 0 else '적음'}"
-
-
-def delta_sentence_pp(a: float, b: float) -> str:
-    if pd.isna(a) or pd.isna(b):
-        return "비교 불가"
-    d = (b - a) * 100
-    if abs(d) < 1e-12:
-        return "A와 B가 동일"
-    return f"B가 A보다 {abs(d):.2f}%p {'높음' if d > 0 else '낮음'}"
-
-
-def compute_concentration_metrics(prod_df: pd.DataFrame) -> Dict[str, float]:
-    s = prod_df.sort_values("노출수", ascending=False)["노출수"].astype(float)
-    total = s.sum()
-    if total <= 0:
-        return {"top3": 0, "top5": 0, "top10": 0, "hhi": 0, "hhi_10000": 0}
-    share = s / total
-    hhi = float((share ** 2).sum())
-    return {
-        "top3": float(share.head(3).sum()),
-        "top5": float(share.head(5).sum()),
-        "top10": float(share.head(10).sum()),
-        "hhi": hhi,
-        "hhi_10000": hhi * 10000,
-    }
 
 
 def sec(title: str):
@@ -356,7 +289,6 @@ class Filters:
     campaigns: List[str]
 
 
-@st.cache_data(show_spinner=False)
 def apply_filters(df: pd.DataFrame, f: Filters) -> pd.DataFrame:
     out = df.copy()
     if f.date_min is not None:
@@ -380,21 +312,67 @@ def apply_filters(df: pd.DataFrame, f: Filters) -> pd.DataFrame:
     return out
 
 
-def period_delta(df: pd.DataFrame) -> Dict:
-    m = sorted(df["연월"].dropna().unique())
-    if len(m) < 2:
-        return {}
-    cur = df[df["연월"] == m[-1]]
-    prev = df[df["연월"] == m[-2]]
-    res = {}
-    for c in ["노출수", "총클릭수", "동영상조회수"]:
-        cc, pp = cur[c].sum(), prev[c].sum()
-        res[c] = None if pp == 0 else (cc - pp) / pp
-    cctr = (cur["총클릭수"].sum() / cur["노출수"].sum()) if cur["노출수"].sum() > 0 else np.nan
-    pctr = (prev["총클릭수"].sum() / prev["노출수"].sum()) if prev["노출수"].sum() > 0 else np.nan
-    res["CTR_total"] = None if pd.isna(pctr) or pctr == 0 else (cctr - pctr) / pctr
-    res["CTR_pp"] = None if pd.isna(pctr) else (cctr - pctr)
-    return res
+def summarize_period(df: pd.DataFrame) -> Dict[str, float]:
+    imp = df["노출수"].sum()
+    clk = df["클릭수"].sum()
+    tclk = df["총클릭수"].sum()
+    vw = df["동영상조회수"].sum()
+    return {
+        "노출수": imp,
+        "클릭수": clk,
+        "총클릭수": tclk,
+        "CTR_total": (tclk / imp) if imp > 0 else np.nan,
+        "동영상조회수": vw,
+        "VTR": (vw / imp) if imp > 0 else np.nan,
+        "광고상품수": df.loc[df["노출수"] > 0, "광고상품명_정리"].nunique(),
+        "캠페인수": df.loc[df["노출수"] > 0, "캠페인명"].nunique(),
+    }
+
+
+def promotion_product_compare(df_a: pd.DataFrame, df_b: pd.DataFrame, min_imp: int) -> pd.DataFrame:
+    a = aggregate(df_a, ("광고상품명_정리",))[["광고상품명_정리", "노출수", "총클릭수", "CTR_total", "VTR"]]
+    b = aggregate(df_b, ("광고상품명_정리",))[["광고상품명_정리", "노출수", "총클릭수", "CTR_total", "VTR"]]
+    a = a.rename(columns={"노출수": "A_노출수", "총클릭수": "A_총클릭수", "CTR_total": "A_CTR", "VTR": "A_VTR"})
+    b = b.rename(columns={"노출수": "B_노출수", "총클릭수": "B_총클릭수", "CTR_total": "B_CTR", "VTR": "B_VTR"})
+    m = a.merge(b, on="광고상품명_정리", how="outer").fillna(0)
+    m["노출 증감"] = m["B_노출수"] - m["A_노출수"]
+    m["총클릭 증감"] = m["B_총클릭수"] - m["A_총클릭수"]
+    m["CTR 변화(%p)"] = (m["B_CTR"] - m["A_CTR"]) * 100
+    m["VTR 변화(%p)"] = (m["B_VTR"] - m["A_VTR"]) * 100
+    m["해석상태"] = np.where((m["A_노출수"] < min_imp) | (m["B_노출수"] < min_imp), "표본부족", "분석가능")
+    return m.sort_values("노출 증감", ascending=False)
+
+
+def compute_concentration_metrics(prod_df: pd.DataFrame) -> Dict[str, float]:
+    s = prod_df.sort_values("노출수", ascending=False)["노출수"].astype(float)
+    total = s.sum()
+    if total <= 0:
+        return {"top3": 0, "top5": 0, "top10": 0, "hhi": 0, "hhi_10000": 0}
+    share = s / total
+    hhi = float((share ** 2).sum())
+    return {
+        "top3": float(share.head(3).sum()),
+        "top5": float(share.head(5).sum()),
+        "top10": float(share.head(10).sum()),
+        "hhi": hhi,
+        "hhi_10000": hhi * 10000,
+    }
+
+
+def delta_sentence_count(a: float, b: float) -> str:
+    d = b - a
+    if abs(d) < 1e-12:
+        return "A와 B가 동일"
+    return f"B가 A보다 {fmt_kor_unit(abs(d))} {'큼' if d > 0 else '적음'}"
+
+
+def delta_sentence_pp(a: float, b: float) -> str:
+    if pd.isna(a) or pd.isna(b):
+        return "비교 불가"
+    d = (b - a) * 100
+    if abs(d) < 1e-12:
+        return "A와 B가 동일"
+    return f"B가 A보다 {abs(d):.2f}%p {'높음' if d > 0 else '낮음'}"
 
 
 def build_volume_click_ctr_chart(dfv: pd.DataFrame, x: str, title: str) -> go.Figure:
@@ -404,38 +382,49 @@ def build_volume_click_ctr_chart(dfv: pd.DataFrame, x: str, title: str) -> go.Fi
 
     fig = go.Figure()
     fig.add_bar(
-        x=dfv[x], y=dfv["노출수"], name="노출수", marker_color="#2563EB", yaxis="y",
-        offsetgroup="imp", legendgroup="imp",
-        hovertemplate="노출수: %{customdata}<extra></extra>", customdata=[fmt_kor_unit(v) for v in dfv["노출수"]]
+        x=dfv[x],
+        y=dfv["노출수"],
+        name="노출수",
+        marker_color="#2563EB",
+        yaxis="y",
+        offsetgroup="imp",
+        legendgroup="imp",
+        hovertemplate="노출수: %{customdata}<extra></extra>",
+        customdata=[fmt_kor_unit(v) for v in dfv["노출수"]],
     )
     fig.add_bar(
-        x=dfv[x], y=dfv["총클릭수"], name="총클릭수", marker_color="#16A34A", yaxis="y2",
-        offsetgroup="clk", legendgroup="clk",
-        hovertemplate="총클릭수: %{customdata}<extra></extra>", customdata=[fmt_kor_unit(v) for v in dfv["총클릭수"]]
+        x=dfv[x],
+        y=dfv["총클릭수"],
+        name="클릭수",
+        marker_color="#16A34A",
+        yaxis="y2",
+        offsetgroup="clk",
+        legendgroup="clk",
+        hovertemplate="클릭수: %{customdata}<extra></extra>",
+        customdata=[fmt_kor_unit(v) for v in dfv["총클릭수"]],
     )
     fig.add_scatter(
-        x=dfv[x], y=dfv["CTR_total"], name="CTR_total", mode="lines+markers+text", line=dict(color="#D97706", width=2), marker=dict(size=7),
-        text=[fmt_pct(v) for v in dfv["CTR_total"]], textposition="top center", hovertemplate="CTR_total: %{text}<extra></extra>",
+        x=dfv[x],
+        y=dfv["CTR_total"],
+        name="CTR_total",
+        mode="lines+markers+text",
+        line=dict(color="#D97706", width=2),
+        marker=dict(size=7),
+        text=[fmt_pct(v) for v in dfv["CTR_total"]],
+        textposition="top center",
+        hovertemplate="CTR_total: %{text}<extra></extra>",
         cliponaxis=False,
-        yaxis="y3"
+        yaxis="y3",
     )
-    apply_meta_theme(fig, title, 360)
+    apply_meta_theme(fig, title, 390)
     y1v, y1t = make_kor_ticks(float(dfv["노출수"].max()) if not dfv.empty else 0)
     y2v, y2t = make_kor_ticks(float(dfv["총클릭수"].max()) if not dfv.empty else 0)
     fig.update_layout(
         barmode="group",
         xaxis=dict(tickangle=-28, automargin=True),
-        yaxis=dict(title="노출수", tickmode="array", tickvals=y1v, ticktext=y1t, gridcolor="#EEF2F7", range=[0, y1v[-1]]),
-        yaxis2=dict(title="총클릭수", overlaying="y", side="right", tickmode="array", tickvals=y2v, ticktext=y2t, showgrid=False, range=[0, y2v[-1]]),
-        yaxis3=dict(
-            overlaying="y",
-            side="right",
-            range=[0, ctr_upper],
-            showticklabels=False,
-            visible=False,
-            showgrid=False,
-            zeroline=False,
-        ),
+        yaxis=dict(title="노출수", tickmode="array", tickvals=y1v, ticktext=y1t, range=[0, y1v[-1]], gridcolor="#EEF2F7"),
+        yaxis2=dict(title="클릭수", overlaying="y", side="right", tickmode="array", tickvals=y2v, ticktext=y2t, range=[0, y2v[-1]], showgrid=False),
+        yaxis3=dict(overlaying="y", side="right", range=[0, ctr_upper], showticklabels=False, visible=False, showgrid=False, zeroline=False),
     )
     return fig
 
@@ -450,6 +439,11 @@ def main():
         st.stop()
 
     raw = load_csv(upload.getvalue()) if upload else load_csv_path(path)
+
+    if not {"노출수", "클릭수"}.issubset(raw.columns):
+        st.error("CSV에 필수 컬럼(노출수, 클릭수)이 없습니다.")
+        st.stop()
+
     df_raw = preprocess(raw)
 
     with st.sidebar:
@@ -478,7 +472,15 @@ def main():
     f = Filters(d0, d1, fy, fm, fw, fc, fi, fp, fcam)
     df = apply_filters(df_raw, f)
 
-    st.markdown(f"<div class='report-header'><h1>📊 AD Performance Report</h1><p>기간 {df['일자'].min().date()} ~ {df['일자'].max().date()} · 행 {len(df):,} · 상품 {df['광고상품명_정리'].nunique()} · 프로모션 {df['프로모션명'].nunique()}</p></div>", unsafe_allow_html=True)
+    date_min = df["일자"].min()
+    date_max = df["일자"].max()
+    date_str = f"{date_min.date()} ~ {date_max.date()}" if pd.notna(date_min) and pd.notna(date_max) else "날짜 미상"
+    st.markdown(
+        f"<div class='report-header'><h1>📊 AD Performance Report</h1><p>기간 {date_str} · 행 {len(df):,} · 상품 {df['광고상품명_정리'].nunique()} · 프로모션 {df['프로모션별'].nunique()}</p></div>",
+        unsafe_allow_html=True,
+    )
+
+    has_video_data = df["동영상조회수"].sum() > 0
 
     sec("전체 KPI 요약")
     total_imp = df["노출수"].sum()
@@ -487,87 +489,102 @@ def main():
     total_vw = df["동영상조회수"].sum()
     ctr_t = total_tclk / total_imp if total_imp else np.nan
     vtr = total_vw / total_imp if total_imp else np.nan
-    dd = period_delta(df)
 
+    kpis = [
+        ("노출수", fmt_kpi_compact(total_imp), ""),
+        ("클릭수", fmt_kpi_compact(total_clk), ""),
+        ("총클릭수", fmt_kpi_compact(total_tclk), ""),
+        ("CTR(전체)", fmt_pct(ctr_t), ""),
+        ("동영상조회수", fmt_kpi_compact(total_vw), "") if has_video_data else ("광고상품수", fmt_kpi_compact(df["광고상품명_정리"].nunique()), ""),
+        ("VTR", fmt_pct(vtr), "") if has_video_data else ("캠페인수", fmt_kpi_compact(df["캠페인명"].nunique()), ""),
+    ]
     cols = st.columns(6)
-    for i, (lbl, val, dk) in enumerate([
-        ("노출수", fmt_kpi_compact(total_imp), "노출수"),
-        ("총클릭수", fmt_kpi_compact(total_tclk), "총클릭수"),
-        ("클릭수", fmt_kpi_compact(total_clk), None),
-        ("CTR(전체)", fmt_pct(ctr_t), "CTR_total"),
-        ("동영상조회수", fmt_kpi_compact(total_vw), "동영상조회수"),
-        ("VTR", fmt_pct(vtr), None),
-    ]):
+    for i, (lbl, val, delta) in enumerate(kpis):
         with cols[i]:
-            d = dd.get(dk) if dk else None
-            s = "" if d is None else (f"▲ {abs(d)*100:.2f}%" if d > 0 else f"▼ {abs(d)*100:.2f}%")
-            kpi_card(lbl, val, s, None if d is None else d > 0)
+            kpi_card(lbl, val, delta)
 
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📦 상품 분석", "🔀 상품 × 프로모션", "📈 시계열", "🔁 프로모션 비교", "📅 요일·구분", "🏭 업종", "📋 Appendix"
     ])
 
     with tab1:
-        agg = compute_efficiency(aggregate(df, ["광고상품명_정리"]))
+        agg = compute_efficiency(aggregate(df, ("광고상품명_정리",)))
         agg["표본부족"] = np.where(agg["노출수"] < min_imp, "표본부족", "분석가능")
-        disp = agg[["광고상품명_정리", "노출수", "총클릭수", "CTR_total", "VTR", "표본부족", "eff_grade"]].copy()
-        disp.columns = ["상품", "노출수", "총클릭수", "CTR_total", "VTR", "해석상태", "효율등급"]
-        disp["노출수"] = disp["노출수"].map(fmt_table_number)
-        disp["총클릭수"] = disp["총클릭수"].map(fmt_table_number)
-        disp["CTR_total"] = disp["CTR_total"].map(fmt_pct)
-        disp["VTR"] = disp["VTR"].map(fmt_pct)
+
+        cols_base = ["광고상품명_정리", "노출수", "총클릭수", "CTR_total", "표본부족", "eff_grade"]
+        if has_video_data:
+            cols_base.insert(4, "VTR")
+        disp = agg[cols_base].copy()
         sec("상품 성과 테이블")
+        if "VTR" in disp.columns:
+            disp.columns = ["상품", "노출수", "총클릭수", "CTR_total", "VTR", "해석상태", "효율등급"]
+        else:
+            disp.columns = ["상품", "노출수", "총클릭수", "CTR_total", "해석상태", "효율등급"]
+        for c in ["노출수", "총클릭수"]:
+            disp[c] = disp[c].map(fmt_table_number)
+        disp["CTR_total"] = disp["CTR_total"].map(fmt_pct)
+        if "VTR" in disp.columns:
+            disp["VTR"] = disp["VTR"].map(fmt_pct)
         st.dataframe(disp, use_container_width=True, hide_index=True)
+        st.download_button("📥 CSV 다운로드", data=agg.to_csv(index=False, encoding="utf-8-sig"), file_name="product_summary.csv", mime="text/csv")
 
         plot_df = agg.sort_values("노출수", ascending=False).head(15).copy()
         plot_df["상품축"] = plot_df["광고상품명_정리"].map(lambda x: ellipsis(x, 14))
-        sec("TOP 15 상품 — 노출수 · 총클릭수 · CTR_total")
+        sec("TOP 15 상품 — 노출수 · 클릭수 · CTR_total")
         st.plotly_chart(build_volume_click_ctr_chart(plot_df, "상품축", "볼륨 중심 비교 (CTR은 데이터레이블)"), use_container_width=True)
 
-        st.write("")
         sec("버블 포트폴리오 매트릭스")
         show_low_sample = st.checkbox("표본부족 포함", value=False, key="bubble_low_sample")
         bubble_df = agg.copy() if show_low_sample else agg[agg["노출수"] >= min_imp].copy()
-        if bubble_df.empty:
-            st.warning("표시할 상품이 없습니다. (min_imp 또는 필터 확인)")
-        else:
+        if not bubble_df.empty:
             med_x = bubble_df["노출수"].median()
             med_y = bubble_df["CTR_total"].median()
             x_max = max(float(bubble_df["노출수"].max()), 1)
             y_max = max(float(bubble_df["CTR_total"].max()), 0.01)
             y_min = max(0.0, float(bubble_df["CTR_total"].min()) * 0.9)
+            x_left = med_x * 0.5 if med_x * 0.5 < med_x else med_x * 0.1
+            x_right = min(med_x * 1.4, x_max * 0.92)
 
             fig_bubble = go.Figure()
-            # 사분면 배경
             fig_bubble.add_shape(type="rect", x0=0, x1=med_x, y0=y_min, y1=med_y, fillcolor="rgba(239,68,68,0.05)", line=dict(width=0), layer="below")
             fig_bubble.add_shape(type="rect", x0=med_x, x1=x_max * 1.05, y0=y_min, y1=med_y, fillcolor="rgba(251,146,60,0.05)", line=dict(width=0), layer="below")
             fig_bubble.add_shape(type="rect", x0=0, x1=med_x, y0=med_y, y1=y_max * 1.15, fillcolor="rgba(59,130,246,0.06)", line=dict(width=0), layer="below")
             fig_bubble.add_shape(type="rect", x0=med_x, x1=x_max * 1.05, y0=med_y, y1=y_max * 1.15, fillcolor="rgba(16,185,129,0.07)", line=dict(width=0), layer="below")
             fig_bubble.add_vline(x=med_x, line=dict(color="#64748B", dash="dot"))
             fig_bubble.add_hline(y=med_y, line=dict(color="#64748B", dash="dot"))
-
-            bubble_text = [ellipsis(v, 12) if i < 10 else "" for i, v in enumerate(bubble_df.sort_values("총클릭수", ascending=False)["광고상품명_정리"])]
             plot_b = bubble_df.sort_values("총클릭수", ascending=False).copy()
-            fig_bubble.add_trace(go.Scatter(
-                x=plot_b["노출수"], y=plot_b["CTR_total"], mode="markers+text", text=bubble_text,
-                textposition="top center", name="광고상품",
-                customdata=np.array([[n, fmt_kor_unit(i), fmt_kor_unit(c), fmt_pct(ct), fmt_pct(v)] for n, i, c, ct, v in zip(plot_b["광고상품명_정리"], plot_b["노출수"], plot_b["총클릭수"], plot_b["CTR_total"], plot_b["VTR"])], dtype=object),
-                hovertemplate="상품명: %{customdata[0]}<br>노출수: %{customdata[1]}<br>총클릭수: %{customdata[2]}<br>CTR_total: %{customdata[3]}<br>VTR: %{customdata[4]}<extra></extra>",
-                marker=dict(size=np.clip(np.sqrt(plot_b["총클릭수"].fillna(0)) * 2.5, 12, 55), color="#2563EB", opacity=0.55, line=dict(color="#1D4ED8", width=1)),
-            ))
-            fig_bubble.add_annotation(x=med_x * 0.45, y=med_y + (y_max - med_y) * 0.72, text="테스트 확대", showarrow=False, font=dict(size=11, color="#1E3A8A"))
-            fig_bubble.add_annotation(x=med_x * 1.35, y=med_y + (y_max - med_y) * 0.72, text="확대 후보 ★", showarrow=False, font=dict(size=11, color="#065F46"))
-            fig_bubble.add_annotation(x=med_x * 1.35, y=max(y_min, med_y * 0.35), text="개선 우선", showarrow=False, font=dict(size=11, color="#9A3412"))
-            fig_bubble.add_annotation(x=med_x * 0.45, y=max(y_min, med_y * 0.35), text="집행 축소 검토", showarrow=False, font=dict(size=11, color="#991B1B"))
-
-            apply_meta_theme(fig_bubble, "상품 포지셔닝 매트릭스 (X:노출, Y:CTR_total, 버블:총클릭수)", 460)
-            xvals, xtext = axis_ticks_from_series(plot_b["노출수"])
+            bubble_text = [ellipsis(v, 12) if i < 10 else "" for i, v in enumerate(plot_b["광고상품명_정리"])]
+            fig_bubble.add_trace(
+                go.Scatter(
+                    x=plot_b["노출수"],
+                    y=plot_b["CTR_total"],
+                    mode="markers+text",
+                    text=bubble_text,
+                    textposition="top center",
+                    name="광고상품",
+                    customdata=np.array(
+                        [
+                            [n, fmt_kor_unit(i), fmt_kor_unit(c), fmt_pct(ct), fmt_pct(v)]
+                            for n, i, c, ct, v in zip(plot_b["광고상품명_정리"], plot_b["노출수"], plot_b["총클릭수"], plot_b["CTR_total"], plot_b["VTR"])
+                        ],
+                        dtype=object,
+                    ),
+                    hovertemplate="상품명: %{customdata[0]}<br>노출수: %{customdata[1]}<br>클릭수: %{customdata[2]}<br>CTR_total: %{customdata[3]}<br>VTR: %{customdata[4]}<extra></extra>",
+                    marker=dict(size=np.clip(np.sqrt(plot_b["총클릭수"].fillna(0)) * 2.5, 12, 55), color="#2563EB", opacity=0.55, line=dict(color="#1D4ED8", width=1)),
+                )
+            )
+            fig_bubble.add_annotation(x=x_left, y=med_y + (y_max - med_y) * 0.72, text="테스트 확대", showarrow=False, font=dict(size=11, color="#1E3A8A"), layer="above")
+            fig_bubble.add_annotation(x=x_right, y=med_y + (y_max - med_y) * 0.72, text="확대 후보 ★", showarrow=False, font=dict(size=11, color="#065F46"), layer="above")
+            fig_bubble.add_annotation(x=x_right, y=max(y_min, med_y * 0.35), text="개선 우선", showarrow=False, font=dict(size=11, color="#9A3412"), layer="above")
+            fig_bubble.add_annotation(x=x_left, y=max(y_min, med_y * 0.35), text="집행 축소 검토", showarrow=False, font=dict(size=11, color="#991B1B"), layer="above")
+            apply_meta_theme(fig_bubble, "상품 포지셔닝 매트릭스 (X:노출, Y:CTR_total, 버블:클릭수)", 480)
+            xv, xt = make_kor_ticks(float(plot_b["노출수"].max()))
+            yv, yt = make_pct_ticks(float(plot_b["CTR_total"].max()) if not plot_b.empty else 0.01)
             fig_bubble.update_layout(showlegend=False)
-            fig_bubble.update_xaxes(title="노출수", tickmode="array", tickvals=xvals, ticktext=xtext, automargin=True)
-            fig_bubble.update_yaxes(title="CTR_total", tickformat=".2%", range=[y_min, y_max * 1.15], automargin=True)
+            fig_bubble.update_xaxes(title="노출수", tickmode="array", tickvals=xv, ticktext=xt, range=[0, xv[-1]], automargin=True)
+            fig_bubble.update_yaxes(title="CTR_total", tickmode="array", tickvals=yv, ticktext=yt, range=[0, yv[-1]], automargin=True)
             st.plotly_chart(fig_bubble, use_container_width=True)
 
-        st.write("")
         sec("노출 집중도 분석")
         conc_src = agg[agg["노출수"] > 0].copy()
         conc = compute_concentration_metrics(conc_src)
@@ -588,18 +605,26 @@ def main():
 
         fig_conc = go.Figure()
         fig_conc.add_bar(
-            x=top_imp["상품축"], y=top_imp["점유율"], name="노출 점유율",
+            x=top_imp["상품축"],
+            y=top_imp["점유율"],
+            name="노출 점유율",
             marker_color="#2563EB",
             customdata=np.array([[n, fmt_kor_unit(i), fmt_pct(s)] for n, i, s in zip(top_imp["광고상품명_정리"], top_imp["노출수"], top_imp["점유율"])], dtype=object),
             hovertemplate="상품명: %{customdata[0]}<br>노출수: %{customdata[1]}<br>점유율: %{customdata[2]}<extra></extra>",
         )
         fig_conc.add_scatter(
-            x=top_imp["상품축"], y=top_imp["누적점유율"], name="누적 점유율", mode="lines+markers+text",
-            line=dict(color="#D97706", width=2), marker=dict(size=6),
-            text=[fmt_pct(v) for v in top_imp["누적점유율"]], textposition="top center",
-            yaxis="y2", hovertemplate="누적 점유율: %{text}<extra></extra>",
+            x=top_imp["상품축"],
+            y=top_imp["누적점유율"],
+            name="누적 점유율",
+            mode="lines+markers+text",
+            line=dict(color="#D97706", width=2),
+            marker=dict(size=6),
+            text=[fmt_pct(v) for v in top_imp["누적점유율"]],
+            textposition="top center",
+            yaxis="y2",
+            hovertemplate="누적 점유율: %{text}<extra></extra>",
         )
-        apply_meta_theme(fig_conc, "상위 상품 노출 점유율 및 누적 비중", 380)
+        apply_meta_theme(fig_conc, "상위 상품 노출 점유율 및 누적 비중", 420)
         fig_conc.update_layout(
             barmode="group",
             xaxis=dict(tickangle=-24, automargin=True),
@@ -618,58 +643,55 @@ def main():
         ql = agg[(agg["노출수"] >= med_imp) & (agg["CTR_total"] < med_ctr) & (agg["노출수"] >= min_imp)]
         lh = agg[(agg["노출수"] < med_imp) & (agg["CTR_total"] >= med_ctr) & (agg["노출수"] >= min_imp)]
         ll = agg[(agg["노출수"] < med_imp) & (agg["CTR_total"] < med_ctr) & (agg["노출수"] >= min_imp)]
-        sec("운영 인사이트")
-        insight(f"확대 후보(고노출·고CTR): {', '.join(qh['광고상품명_정리'].head(3).tolist()) or '없음'}")
-        insight(f"개선 우선(고노출·저CTR): {', '.join(ql['광고상품명_정리'].head(3).tolist()) or '없음'}", warn=True)
-        insight(f"재테스트 후보(저노출·고CTR): {', '.join(lh['광고상품명_정리'].head(3).tolist()) or '없음'}")
-        insight(f"집행 축소 검토(저노출·저CTR): {', '.join(ll['광고상품명_정리'].head(3).tolist()) or '없음'}", warn=True)
+        with st.expander("💡 운영 인사이트 펼치기", expanded=True):
+            insight(f"확대 후보(고노출·고CTR): {', '.join(qh['광고상품명_정리'].head(3).tolist()) or '없음'}")
+            insight(f"개선 우선(고노출·저CTR): {', '.join(ql['광고상품명_정리'].head(3).tolist()) or '없음'}", warn=True)
+            insight(f"재테스트 후보(저노출·고CTR): {', '.join(lh['광고상품명_정리'].head(3).tolist()) or '없음'}")
+            insight(f"집행 축소 검토(저노출·저CTR): {', '.join(ll['광고상품명_정리'].head(3).tolist()) or '없음'}", warn=True)
 
     with tab2:
-        allp = sorted(df["광고상품명_정리"].unique().tolist())
-        sel = st.selectbox("상품 선택", allp)
-        d2 = aggregate(df[df["광고상품명_정리"] == sel], ["프로모션명", "연월"])
-        pp = aggregate(df[df["광고상품명_정리"] == sel], ["프로모션명"]).sort_values("노출수", ascending=False)
-        pp["프로모션축"] = pp["프로모션명"].map(lambda x: ellipsis(x, 16))
+        allp = sorted(df["광고상품명_정리"].dropna().unique().tolist())
+        sel = st.selectbox("상품 선택", allp) if allp else None
+        if sel:
+            d2 = aggregate(df[df["광고상품명_정리"] == sel], ("프로모션명", "연월"))
+            pp = aggregate(df[df["광고상품명_정리"] == sel], ("프로모션명",)).sort_values("노출수", ascending=False)
+            pp["프로모션축"] = pp["프로모션명"].map(lambda x: ellipsis(x, 16))
 
-        sec("프로모션별 노출 · 클릭 · CTR")
-        st.plotly_chart(build_volume_click_ctr_chart(pp.head(20), "프로모션축", f"{sel} 프로모션 성과"), use_container_width=True)
+            sec("프로모션별 노출 · 클릭 · CTR")
+            st.plotly_chart(build_volume_click_ctr_chart(pp.head(20), "프로모션축", f"{sel} 프로모션 성과"), use_container_width=True)
 
-        sec("상품 — 프로모션별 월별 노출·CTR 추이 (단순화)")
-        top_promos = pp.head(6)["프로모션명"].tolist()
-        md = d2[d2["프로모션명"].isin(top_promos)].copy().sort_values("연월")
-        md["연월_str"] = md["연월"].dt.strftime("%Y-%m")
-        figm = go.Figure()
-        for i, prm in enumerate(top_promos):
-            sub = md[md["프로모션명"] == prm]
-            figm.add_bar(
-                x=sub["연월_str"],
-                y=sub["노출수"],
-                name=ellipsis(prm, 16),
-                marker_color=COLORS[i % len(COLORS)],
-                customdata=np.array([
-                    [fmt_kor_unit(v1), fmt_pct(v2)] for v1, v2 in zip(sub["노출수"], sub["CTR_total"])
-                ], dtype=object),
-                hovertemplate="월: %{x}<br>노출수: %{customdata[0]}<br>CTR_total: %{customdata[1]}<extra></extra>",
-            )
-        apply_meta_theme(figm, "월별 노출 비교(CTR은 hover 보조)", 360)
-        yv, yt = axis_ticks_from_series(md["노출수"]) if not md.empty else ([0], ["0"])
-        month_labels = md["연월_str"].dropna().drop_duplicates().tolist()
-        figm.update_layout(
-            barmode="group",
-            yaxis=dict(tickmode="array", tickvals=yv, ticktext=yt, title="노출수", automargin=True),
-        )
-        apply_month_axis(figm, month_labels, angle=-20)
-        st.plotly_chart(figm, use_container_width=True)
+            sec("상품 — 프로모션별 월별 노출·CTR 추이 (단순화)")
+            top_promos = pp.head(6)["프로모션명"].tolist()
+            md = d2[d2["프로모션명"].isin(top_promos)].copy().sort_values("연월")
+            md["연월_str"] = md["연월"].dt.strftime("%Y-%m")
+            month_order = md.sort_values("연월")["연월_str"].dropna().drop_duplicates().tolist()
+            figm = go.Figure()
+            for i, prm in enumerate(top_promos):
+                sub = md[md["프로모션명"] == prm].sort_values("연월")
+                figm.add_bar(
+                    x=sub["연월_str"],
+                    y=sub["노출수"],
+                    name=ellipsis(prm, 16),
+                    marker_color=COLORS[i % len(COLORS)],
+                    customdata=np.array([[fmt_kor_unit(v1), fmt_pct(v2)] for v1, v2 in zip(sub["노출수"], sub["CTR_total"])], dtype=object),
+                    hovertemplate="월: %{x}<br>노출수: %{customdata[0]}<br>CTR_total: %{customdata[1]}<extra></extra>",
+                )
+            apply_meta_theme(figm, "월별 노출 비교(CTR은 hover 보조)", 390)
+            yv, yt = make_kor_ticks(float(md["노출수"].max()) if not md.empty else 0)
+            figm.update_layout(barmode="group", yaxis=dict(tickmode="array", tickvals=yv, ticktext=yt, range=[0, yv[-1]]))
+            apply_month_axis(figm, month_order, angle=-20)
+            st.plotly_chart(figm, use_container_width=True)
 
         st.caption("※ 아래 차트는 선택 상품이 아닌 전체 데이터 기준(상위 프로모션) 월간 비교입니다.")
         sec("월별 프로모션 전체 성과 (분리 보기)")
         top_n_all = st.slider("전체 프로모션 상위 N(노출수 기준)", 3, 8, 5, key="t2_allpromo_n")
-        all_pm = aggregate(df, ["연월", "프로모션명"]).sort_values("연월")
+        all_pm = aggregate(df, ("연월", "프로모션명")).sort_values("연월")
         top_promos_all = (
             all_pm.groupby("프로모션명", as_index=False)["노출수"].sum().sort_values("노출수", ascending=False).head(top_n_all)["프로모션명"].tolist()
         )
         all_pm = all_pm[all_pm["프로모션명"].isin(top_promos_all)].copy()
-        all_pm["연월_str"] = all_pm["연월"].dt.strftime("%b %Y")
+        all_pm = all_pm.sort_values("연월")
+        all_pm["연월_str"] = all_pm["연월"].dt.strftime("%Y-%m")
         month_all = all_pm["연월_str"].dropna().drop_duplicates().tolist()
 
         c_all_1, c_all_2 = st.columns(2)
@@ -677,31 +699,37 @@ def main():
             sec("1) 월별 프로모션 전체 노출수")
             fig_imp = go.Figure()
             for i, prm in enumerate(top_promos_all):
-                sub = all_pm[all_pm["프로모션명"] == prm]
+                sub = all_pm[all_pm["프로모션명"] == prm].sort_values("연월")
                 fig_imp.add_bar(
-                    x=sub["연월_str"], y=sub["노출수"], name=ellipsis(prm, 14),
-                    offsetgroup=f"imp_{i}", marker_color=COLORS[i % len(COLORS)],
+                    x=sub["연월_str"],
+                    y=sub["노출수"],
+                    name=ellipsis(prm, 14),
+                    offsetgroup=f"imp_{i}",
+                    marker_color=COLORS[i % len(COLORS)],
                     customdata=[fmt_kor_unit(v) for v in sub["노출수"]],
                     hovertemplate="월: %{x}<br>노출수: %{customdata}<extra></extra>",
                 )
-            apply_meta_theme(fig_imp, "전체 데이터 기준 월별 프로모션 노출수", 400)
+            apply_meta_theme(fig_imp, "전체 데이터 기준 월별 프로모션 노출수", 420)
             yv_imp, yt_imp = make_kor_ticks(float(all_pm["노출수"].max()) if not all_pm.empty else 0)
             fig_imp.update_layout(barmode="group", yaxis=dict(tickmode="array", tickvals=yv_imp, ticktext=yt_imp, range=[0, yv_imp[-1]]))
             apply_month_axis(fig_imp, month_all, angle=-18)
             st.plotly_chart(fig_imp, use_container_width=True)
 
         with c_all_2:
-            sec("2) 월별 프로모션 전체 총클릭수")
+            sec("2) 월별 프로모션 전체 클릭수")
             fig_clk = go.Figure()
             for i, prm in enumerate(top_promos_all):
-                sub = all_pm[all_pm["프로모션명"] == prm]
+                sub = all_pm[all_pm["프로모션명"] == prm].sort_values("연월")
                 fig_clk.add_bar(
-                    x=sub["연월_str"], y=sub["총클릭수"], name=ellipsis(prm, 14),
-                    offsetgroup=f"clk_{i}", marker_color=COLORS[i % len(COLORS)],
+                    x=sub["연월_str"],
+                    y=sub["총클릭수"],
+                    name=ellipsis(prm, 14),
+                    offsetgroup=f"clk_{i}",
+                    marker_color=COLORS[i % len(COLORS)],
                     customdata=[fmt_kor_unit(v) for v in sub["총클릭수"]],
-                    hovertemplate="월: %{x}<br>총클릭수: %{customdata}<extra></extra>",
+                    hovertemplate="월: %{x}<br>클릭수: %{customdata}<extra></extra>",
                 )
-            apply_meta_theme(fig_clk, "전체 데이터 기준 월별 프로모션 총클릭수", 400)
+            apply_meta_theme(fig_clk, "전체 데이터 기준 월별 프로모션 클릭수", 420)
             yv_clk, yt_clk = make_kor_ticks(float(all_pm["총클릭수"].max()) if not all_pm.empty else 0)
             fig_clk.update_layout(barmode="group", yaxis=dict(tickmode="array", tickvals=yv_clk, ticktext=yt_clk, range=[0, yv_clk[-1]]))
             apply_month_axis(fig_clk, month_all, angle=-18)
@@ -710,14 +738,18 @@ def main():
         sec("3) 월별 프로모션 전체 CTR_total")
         fig_ctr = go.Figure()
         for i, prm in enumerate(top_promos_all):
-            sub = all_pm[all_pm["프로모션명"] == prm]
+            sub = all_pm[all_pm["프로모션명"] == prm].sort_values("연월")
             fig_ctr.add_scatter(
-                x=sub["연월_str"], y=sub["CTR_total"], name=ellipsis(prm, 14), mode="lines+markers",
-                line=dict(width=2, color=COLORS[i % len(COLORS)]), marker=dict(size=6),
+                x=sub["연월_str"],
+                y=sub["CTR_total"],
+                name=ellipsis(prm, 14),
+                mode="lines+markers",
+                line=dict(width=2, color=COLORS[i % len(COLORS)]),
+                marker=dict(size=6),
                 text=[fmt_pct(v) for v in sub["CTR_total"]],
                 hovertemplate="월: %{x}<br>CTR_total: %{text}<extra></extra>",
             )
-        apply_meta_theme(fig_ctr, "전체 데이터 기준 월별 프로모션 CTR_total", 380)
+        apply_meta_theme(fig_ctr, "전체 데이터 기준 월별 프로모션 CTR_total", 400)
         yv_ctr, yt_ctr = make_pct_ticks(float(all_pm["CTR_total"].max()) if not all_pm.empty else 0.01)
         fig_ctr.update_layout(yaxis=dict(tickmode="array", tickvals=yv_ctr, ticktext=yt_ctr, range=[0, yv_ctr[-1]]))
         apply_month_axis(fig_ctr, month_all, angle=-18)
@@ -726,36 +758,108 @@ def main():
     with tab3:
         unit = st.radio("시간 단위", ["월별", "일별"], horizontal=True)
         t = "연월" if unit == "월별" else "일자"
-        td = aggregate(df, [t]).sort_values(t)
-        td["x"] = td[t].dt.strftime("%b %Y" if unit == "월별" else "%Y-%m-%d")
-        sec("전체 추이 — 노출수(좌) / 총클릭수(우) + CTR 라벨")
+        td = aggregate(df, (t,)).sort_values(t)
+        td["x"] = td[t].dt.strftime("%Y-%m" if unit == "월별" else "%Y-%m-%d")
+
+        sec("전체 추이 — 노출수(좌) / 클릭수(우) + CTR 라벨")
         fig_td = build_volume_click_ctr_chart(td, "x", "기간별 핵심 추이")
+
         if unit == "월별":
-            apply_month_axis(fig_td, td["x"].dropna().drop_duplicates().tolist(), angle=-20)
+            df_sorted = td.sort_values(t)
+            month_order = df_sorted["x"].dropna().drop_duplicates().tolist()
+            apply_month_axis(fig_td, month_order, angle=-20)
+
+        if unit == "일별":
+            daily = aggregate(df, ("일자",)).sort_values("일자")
+            mu = daily["노출수"].mean()
+            sd = daily["노출수"].std(ddof=0)
+            daily["Z점수"] = (daily["노출수"] - mu) / sd if sd and sd > 0 else 0
+            anomalies = daily[np.abs(daily["Z점수"]) > 2.0].copy()
+            for _, r in anomalies.iterrows():
+                color = "red" if r["Z점수"] > 0 else "green"
+                fig_td.add_vline(x=r["일자"].strftime("%Y-%m-%d"), line=dict(color=color, dash="dash", width=1.5))
+
         st.plotly_chart(fig_td, use_container_width=True)
 
-        imp_pos = df[df["노출수"] > 0]
-        sec("기간별 노출 발생 광고상품 수")
-        prod_cnt = imp_pos.groupby(t)["광고상품명_정리"].nunique().reset_index(name="광고상품수")
-        prod_cnt["x"] = prod_cnt[t].dt.strftime("%Y-%m" if unit == "월별" else "%Y-%m-%d")
-        fig_p = go.Figure(go.Bar(x=prod_cnt["x"], y=prod_cnt["광고상품수"], marker_color="#1E40AF", text=prod_cnt["광고상품수"]))
-        apply_meta_theme(fig_p, "기간별 노출 발생 광고상품 수", 280)
-        fig_p.update_traces(textposition="outside", hovertemplate="기간: %{x}<br>광고상품 수: %{y:,}<extra></extra>")
-        yv_p, yt_p = make_kor_ticks(float(prod_cnt["광고상품수"].max()) if not prod_cnt.empty else 0)
-        fig_p.update_yaxes(tickmode="array", tickvals=yv_p, ticktext=yt_p, range=[0, yv_p[-1]])
-        st.plotly_chart(fig_p, use_container_width=True)
+        # anomaly table
+        daily = aggregate(df, ("일자",)).sort_values("일자")
+        mu = daily["노출수"].mean()
+        sd = daily["노출수"].std(ddof=0)
+        daily["Z점수"] = (daily["노출수"] - mu) / sd if sd and sd > 0 else 0
+        daily["판정"] = np.where(daily["Z점수"] > 2, "🔺 급등", np.where(daily["Z점수"] < -2, "🔻 급락", ""))
+        anom = daily[daily["판정"] != ""][["일자", "노출수", "Z점수", "판정"]].copy()
+        if not anom.empty:
+            sec("이상치 탐지 (일별 노출수)")
+            anom["일자"] = anom["일자"].dt.strftime("%Y-%m-%d")
+            anom["노출수"] = anom["노출수"].map(fmt_table_number)
+            anom["Z점수"] = anom["Z점수"].map(lambda v: f"{v:.2f}")
+            st.dataframe(anom, hide_index=True, use_container_width=True)
+            st.download_button("📥 CSV 다운로드", data=anom.to_csv(index=False, encoding="utf-8-sig"), file_name="anomaly_daily.csv", mime="text/csv")
 
-        sec("기간별 노출 발생 캠페인 수")
-        # 집계 기준: period별 캠페인명 nunique, 단 노출수 > 0 행만 포함
-        # 과거 값이 작게 나왔던 이유: 전체 데이터에서 중복 제거를 먼저 하거나 노출 없는 행 포함 시 왜곡 가능
-        camp_cnt = imp_pos.groupby(t)["캠페인명"].nunique().reset_index(name="캠페인수")
-        camp_cnt["x"] = camp_cnt[t].dt.strftime("%Y-%m" if unit == "월별" else "%Y-%m-%d")
-        fig_c = go.Figure(go.Bar(x=camp_cnt["x"], y=camp_cnt["캠페인수"], marker_color="#7C3AED", text=camp_cnt["캠페인수"]))
-        apply_meta_theme(fig_c, "기간별 노출 발생 캠페인 수", 280)
-        fig_c.update_traces(textposition="outside")
-        yv_c, yt_c = make_kor_ticks(float(camp_cnt["캠페인수"].max()) if not camp_cnt.empty else 0)
-        fig_c.update_yaxes(tickmode="array", tickvals=yv_c, ticktext=yt_c, range=[0, yv_c[-1]])
-        st.plotly_chart(fig_c, use_container_width=True)
+        # 라이브 일정 뷰
+        sec("프로모션 라이브 일정 (구분별 색상)")
+        live_df = df.groupby("프로모션명", as_index=False).agg(
+            라이브시작=("라이브일자", "min"),
+            라이브종료=("일자", "max"),
+            노출수=("노출수", "sum"),
+            구분=("구분", lambda s: s.mode().iloc[0] if len(s.mode()) else "기타"),
+        )
+        live_df = live_df.sort_values("노출수", ascending=False).head(15)
+        fig_live = go.Figure()
+        group_colors = {g: COLORS[i % len(COLORS)] for i, g in enumerate(sorted(live_df["구분"].dropna().unique().tolist()))}
+        for _, r in live_df.iterrows():
+            if pd.isna(r["라이브시작"]) or pd.isna(r["라이브종료"]):
+                continue
+            fig_live.add_trace(
+                go.Scatter(
+                    x=[r["라이브시작"], r["라이브종료"]],
+                    y=[r["프로모션명"], r["프로모션명"]],
+                    mode="lines",
+                    line=dict(width=12, color=group_colors.get(r["구분"], "#64748B")),
+                    name=str(r["구분"]),
+                    showlegend=False,
+                    hovertemplate=f"프로모션: {r['프로모션명']}<br>시작: {r['라이브시작'].date()}<br>종료: {r['라이브종료'].date()}<extra></extra>",
+                )
+            )
+        # separate legend entries
+        for k, c in group_colors.items():
+            fig_live.add_trace(go.Scatter(x=[None], y=[None], mode="lines", line=dict(width=12, color=c), name=str(k)))
+        apply_meta_theme(fig_live, "프로모션 라이브 일정 (구분별 색상)", 420)
+        fig_live.update_yaxes(categoryorder="array", categoryarray=live_df["프로모션명"].tolist())
+        st.plotly_chart(fig_live, use_container_width=True)
+
+        # MoM table
+        sec("월별 MoM 비교")
+        mt = aggregate(df, ("연월",)).sort_values("연월")
+        mt["연월_str"] = mt["연월"].dt.strftime("%Y-%m")
+        mt["CTR"] = mt["CTR_total"]
+        mt["전월대비_노출수_증감"] = mt["노출수"].diff()
+        mt["전월대비_클릭수_증감"] = mt["총클릭수"].diff()
+        mt["전월대비_CTR_변화(%p)"] = (mt["CTR"].diff() * 100)
+        mom = mt[["연월_str", "노출수", "총클릭수", "CTR", "전월대비_노출수_증감", "전월대비_클릭수_증감", "전월대비_CTR_변화(%p)"]].copy()
+        mom.columns = ["연월", "노출수", "클릭수", "CTR", "전월대비_노출수_증감", "전월대비_클릭수_증감", "전월대비_CTR_변화(%p)"]
+
+        mom_show = mom.copy()
+        mom_show["노출수"] = mom_show["노출수"].map(fmt_table_number)
+        mom_show["클릭수"] = mom_show["클릭수"].map(fmt_table_number)
+        mom_show["CTR"] = mom_show["CTR"].map(fmt_pct)
+        mom_show["전월대비_노출수_증감"] = mom["전월대비_노출수_증감"].map(lambda v: "" if pd.isna(v) else f"{v:+,.0f}")
+        mom_show["전월대비_클릭수_증감"] = mom["전월대비_클릭수_증감"].map(lambda v: "" if pd.isna(v) else f"{v:+,.0f}")
+        mom_show["전월대비_CTR_변화(%p)"] = mom["전월대비_CTR_변화(%p)"].map(lambda v: "" if pd.isna(v) else f"{v:+.2f}%p")
+
+        def color_delta(v):
+            if isinstance(v, str) and v.startswith("+"):
+                return "background-color:#DCFCE7"
+            if isinstance(v, str) and v.startswith("-"):
+                return "background-color:#FEE2E2"
+            return ""
+
+        st.dataframe(
+            mom_show.style.applymap(color_delta, subset=["전월대비_노출수_증감", "전월대비_클릭수_증감", "전월대비_CTR_변화(%p)"]),
+            hide_index=True,
+            use_container_width=True,
+        )
+        st.download_button("📥 CSV 다운로드", data=mom.to_csv(index=False, encoding="utf-8-sig"), file_name="mom_summary.csv", mime="text/csv")
 
     with tab4:
         sec("프로모션 A/B 비교")
@@ -799,6 +903,7 @@ def main():
                 use_container_width=True,
                 hide_index=True,
             )
+            st.download_button("📥 CSV 다운로드", data=cmp.to_csv(index=False, encoding="utf-8-sig"), file_name="promotion_compare_products.csv", mime="text/csv")
 
             inc = cmp.sort_values("노출 증감", ascending=False).head(3)["광고상품명_정리"].tolist()
             dec = cmp.sort_values("노출 증감", ascending=True).head(3)["광고상품명_정리"].tolist()
@@ -810,31 +915,51 @@ def main():
     with tab5:
         c1, c2 = st.columns(2)
         with c1:
-            day = aggregate(df, ["요일"]).copy()
+            day = aggregate(df, ("요일",)).copy()
             day["요일"] = pd.Categorical(day["요일"], categories=DAY_ORDER, ordered=True)
             day = day.sort_values("요일")
             sec("요일별 노출 · 클릭 · CTR")
             st.plotly_chart(build_volume_click_ctr_chart(day, "요일", "요일별 성과"), use_container_width=True)
         with c2:
-            cat = aggregate(df, ["구분"]).sort_values("노출수", ascending=False).copy()
+            cat = aggregate(df, ("구분",)).sort_values("노출수", ascending=False).copy()
             cat["구분축"] = cat["구분"].map(lambda x: ellipsis(x, 12))
             sec("구분별 노출 · 클릭 · CTR")
             st.plotly_chart(build_volume_click_ctr_chart(cat, "구분축", "구분별 성과"), use_container_width=True)
 
         sec("상품 × 요일 히트맵 + TOP 조합")
-        h = aggregate(df, ["광고상품명_정리", "요일"])
+        h = aggregate(df, ("광고상품명_정리", "요일"))
+        order_y = (
+            aggregate(df, ("광고상품명_정리",))
+            .sort_values("노출수", ascending=False)["광고상품명_정리"]
+            .tolist()
+        )
         pv = h.pivot(index="광고상품명_정리", columns="요일", values="CTR_total").reindex(columns=DAY_ORDER)
-        fig_h = go.Figure(go.Heatmap(z=pv.values, x=pv.columns, y=[ellipsis(v, 14) for v in pv.index], colorscale="Blues", hovertemplate="요일: %{x}<br>상품: %{y}<br>CTR_total: %{z:.2%}<extra></extra>"))
-        apply_meta_theme(fig_h, "CTR 히트맵", max(260, len(pv) * 26 + 100))
+        pv = pv.reindex(index=[i for i in order_y if i in pv.index])
+        fig_h = go.Figure(
+            go.Heatmap(
+                z=pv.values,
+                x=pv.columns,
+                y=[ellipsis(v, 14) for v in pv.index],
+                zmin=0,
+                colorscale="Blues",
+                text=np.vectorize(lambda z: "" if pd.isna(z) else f"{z:.2%}")(pv.values),
+                texttemplate="%{text}",
+                hovertemplate="요일: %{x}<br>상품: %{y}<br>CTR_total: %{z:.2%}<extra></extra>",
+            )
+        )
+        apply_meta_theme(fig_h, "CTR 히트맵", max(320, len(pv) * 28 + 160))
         st.plotly_chart(fig_h, use_container_width=True)
-        top_combo = h.sort_values(["CTR_total", "노출수"], ascending=[False, False]).head(10)[["광고상품명_정리", "요일", "노출수", "총클릭수", "CTR_total"]]
-        top_combo["노출수"] = top_combo["노출수"].map(fmt_table_number)
-        top_combo["총클릭수"] = top_combo["총클릭수"].map(fmt_table_number)
-        top_combo["CTR_total"] = top_combo["CTR_total"].map(fmt_pct)
-        st.dataframe(top_combo, hide_index=True, use_container_width=True)
+
+        if "총클릭수" in h.columns:
+            top_combo = h.sort_values(["CTR_total", "노출수"], ascending=[False, False]).head(10)[["광고상품명_정리", "요일", "노출수", "총클릭수", "CTR_total"]]
+            top_combo["노출수"] = top_combo["노출수"].map(fmt_table_number)
+            top_combo["총클릭수"] = top_combo["총클릭수"].map(fmt_table_number)
+            top_combo["CTR_total"] = top_combo["CTR_total"].map(fmt_pct)
+            st.dataframe(top_combo, hide_index=True, use_container_width=True)
+            st.download_button("📥 CSV 다운로드", data=h.to_csv(index=False, encoding="utf-8-sig"), file_name="weekday_heatmap_detail.csv", mime="text/csv")
 
     with tab6:
-        ind = compute_efficiency(aggregate(df, ["업종"]))
+        ind = compute_efficiency(aggregate(df, ("업종",)))
         ind["업종축"] = ind["업종"].map(lambda x: ellipsis(x, 10))
         sec("업종별 노출 · 클릭 · CTR")
         st.plotly_chart(build_volume_click_ctr_chart(ind.sort_values("노출수", ascending=False), "업종축", "업종별 성과"), use_container_width=True)
@@ -845,76 +970,112 @@ def main():
         adv["광고주 목록"] = adv["광고주목록"].map(lambda x: ", ".join(x[:12]) + (" …" if len(x) > 12 else ""))
         out = adv[["업종", "광고주 수", "광고주 목록"]].sort_values("광고주 수", ascending=False)
         st.dataframe(out, use_container_width=True, hide_index=True)
+        st.download_button("📥 CSV 다운로드", data=out.to_csv(index=False, encoding="utf-8-sig"), file_name="industry_advertisers.csv", mime="text/csv")
+
+        st.subheader("광고주 상세 분석")
+        adv_list = sorted(df["광고주"].dropna().unique().tolist())
+        if adv_list:
+            sel_adv = st.selectbox("광고주 선택", adv_list, key="adv_drilldown")
+            df_adv = df[df["광고주"] == sel_adv]
+            s_adv = summarize_period(df_adv)
+            c_adv = st.columns(3)
+            with c_adv[0]:
+                kpi_card("노출수", fmt_kpi_compact(s_adv["노출수"]))
+            with c_adv[1]:
+                kpi_card("클릭수", fmt_kpi_compact(s_adv["클릭수"]))
+            with c_adv[2]:
+                kpi_card("CTR", fmt_pct(s_adv["CTR_total"]))
+
+            adv_m = aggregate(df_adv, ("연월",)).sort_values("연월")
+            adv_m["연월_str"] = adv_m["연월"].dt.strftime("%Y-%m")
+            m_order = adv_m["연월_str"].dropna().drop_duplicates().tolist()
+            fig_adv = go.Figure(go.Scatter(x=adv_m["연월_str"], y=adv_m["노출수"], mode="lines+markers", name="노출수", line=dict(color="#2563EB", width=2)))
+            apply_meta_theme(fig_adv, f"{sel_adv} 월별 노출 추이", 340)
+            yv_adv, yt_adv = make_kor_ticks(float(adv_m["노출수"].max()) if not adv_m.empty else 0)
+            fig_adv.update_yaxes(tickmode="array", tickvals=yv_adv, ticktext=yt_adv, range=[0, yv_adv[-1]])
+            apply_month_axis(fig_adv, m_order, angle=-18)
+            st.plotly_chart(fig_adv, use_container_width=True)
+
+            p_adv = aggregate(df_adv, ("광고상품명_정리",)).sort_values("노출수", ascending=False)
+            p_adv_show = p_adv[["광고상품명_정리", "노출수", "총클릭수", "CTR_total"]].copy()
+            p_adv_show["노출수"] = p_adv_show["노출수"].map(fmt_table_number)
+            p_adv_show["총클릭수"] = p_adv_show["총클릭수"].map(fmt_table_number)
+            p_adv_show["CTR_total"] = p_adv_show["CTR_total"].map(fmt_pct)
+            st.dataframe(p_adv_show, use_container_width=True, hide_index=True)
+            st.download_button("📥 CSV 다운로드", data=p_adv.to_csv(index=False, encoding="utf-8-sig"), file_name="advertiser_products.csv", mime="text/csv")
 
     with tab7:
-        sec("Appendix ① 기본 트래픽 지표")
+        sec("Appendix ① 입력 데이터 구조")
         st.markdown(
             """
-- **노출수**: 광고가 사용자에게 표시된 횟수(볼륨 지표).
-- **클릭수**: 기본 클릭 집계.
-- **총클릭수**: 클릭수 + 컴패니언/부가 클릭을 포함한 실반응 클릭.
-- **동영상조회수**: 영상 재생/조회 기반 반응량.
+- 본 대시보드는 다음 11개 컬럼을 기준으로 동작합니다.
+- `프로모션별, 캠페인명, 일자, 노출수, 클릭수, 라이브일자, 연도, 월, 광고상품명_정리, 구분, 광고주`
+- 내부 계산을 위해 `총클릭수=클릭수`로 통일하여 사용합니다.
 """
         )
 
-        sec("Appendix ② 비율 지표")
+        sec("Appendix ② 기본 지표")
         st.markdown(
             """
-- **CTR** = 클릭수 ÷ 노출수.
-- **CTR(전체)** = 총클릭수 ÷ 노출수. (본 대시보드 핵심 효율 지표)
-- **VTR** = 동영상조회수 ÷ 노출수.
-- **동반클릭/컴패니언 개념**: 기본 클릭 외 보조 반응 클릭 포함 시 총반응을 더 잘 반영.
+- **노출수**: 광고가 노출된 횟수
+- **클릭수**: 실제 클릭 횟수
+- **총클릭수**: 본 데이터에서는 클릭수와 동일
 """
         )
 
-        sec("Appendix ③ 파생 지표 및 해석")
+        sec("Appendix ③ 비율 지표")
         st.markdown(
             """
-- **노출비중**: 특정 행(상품/프로모션/업종)의 노출수 / 전체 노출수.
-- **효율점수(Z-score)**: 동일 집계 그룹 내 CTR_total의 상대 위치.
-- **효율등급(S/A/B/C)**: Z-score 구간화.
-- **표본부족(min_imp)**: 최소 노출 기준 미달 시 효율 해석 제한.
+- **CTR** = 클릭수 ÷ 노출수
+- **CTR(전체)** = 총클릭수 ÷ 노출수 (본 데이터에서는 CTR과 실질 동일)
+- VTR은 입력 데이터에 조회수 컬럼이 없어 본문 지표에서 자동 숨김 처리됩니다.
 """
         )
 
-        sec("Appendix ④ 집계/전처리 규칙")
+        sec("Appendix ④ 파생 지표")
         st.markdown(
             """
-- 일자 파싱 후 연/월/연월 컬럼 생성.
+- **노출비중**: 특정 항목 노출수 / 전체 노출수
+- **효율점수(Z-score)**: 집계 그룹 내 CTR_total 상대 위치
+- **효율등급**: S/A/B/C
+- **표본부족**: `min_imp` 미만 항목
+"""
+        )
+
+        sec("Appendix ⑤ 전처리/집계 규칙")
+        st.markdown(
+            """
+- 일자/라이브일자 datetime 파싱
+- 연/월 기반 연월 생성
 - 광고상품명 정규화:
-  - 대소문자/공백 차이 최소화
-  - 문자열 끝 괄호 suffix 제거 후 통합
-  - `_` 포함 suffix 상품은 별도 상품 유지
-- 업종 분류: 광고주명 키워드 매칭(공백/대소문자 정규화 후 포함 매칭).
+  - 공백 제거 및 lower
+  - 문자열 끝 괄호 suffix 제거
+  - `_` suffix 상품은 별도 유지
+- 구분/광고주 공백 제거
+- 업종은 광고주 키워드 매칭(공백/대소문자 정규화)
 """
         )
 
-        sec("Appendix ⑤ 비교 지표 해석")
+        sec("Appendix ⑥ 비교 해석")
         st.markdown(
             """
-- CTR/VTR 변화는 **상대증감률(%)보다 %p(퍼센트포인트)** 우선 해석.
-- 프로모션 비교에서 문장형 차이 표기 사용:
-  - 예) `B가 A보다 0.18%p 높음`, `B가 A보다 25.4만 큼`
+- 프로모션 비교에서 CTR/VTR 변화는 **%p**를 우선 표시합니다.
+- KPI 차이는 문장형으로 표시합니다.
+  - 예) `B가 A보다 25.4만 큼`, `B가 A보다 0.18%p 높음`
 """
         )
 
-        sec("Appendix ⑥ 노출 집중도(Concentration)")
+        sec("Appendix ⑦ 집중도 지표")
         st.markdown(
             """
-- **Top3/Top5/Top10 누적 노출 비중**: 상위 상품 의존도 점검.
-- **HHI** = 각 상품 점유율 제곱합.
-  - 본 대시보드는 **0~10000 스케일** 병행 제공(`HHI*10000`).
-  - 값이 높을수록 소수 상품 집중도가 큼.
+- Top3/Top5/Top10 누적 노출 비중
+- HHI = 점유율 제곱합
+- HHI는 0~10000 스케일도 함께 제공하여 집중도 해석을 돕습니다.
 """
         )
 
-        sec("Appendix ⑦ 비용 지표 사용 주의")
-        st.markdown(
-            """
-- 광고비/CPC/CPV/eCPM은 내부 하우스 광고 데이터 특성상 결측/품질 이슈 가능성이 있어,
-  본문 핵심 판단은 노출/총클릭/CTR_total/VTR 중심으로 권장합니다.
-"""
-        )
+    st.sidebar.markdown("---")
+    st.sidebar.caption(f"✅ 필터 적용 결과\n{len(df):,}행 | {df['광고상품명_정리'].nunique()}개 상품 | {df['프로모션별'].nunique()}개 프로모션")
 
 
 if __name__ == "__main__":

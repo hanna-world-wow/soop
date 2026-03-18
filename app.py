@@ -255,19 +255,33 @@ def load_conversion_csv(file_bytes: bytes) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def detect_excel_header_row(file_bytes: bytes, max_rows: int = 15) -> int:
+def detect_excel_header_row(file_bytes: bytes, keywords: Sequence[str], max_rows: int = 15) -> int:
     preview = pd.read_excel(io.BytesIO(file_bytes), header=None, nrows=max_rows)
     for idx, row in preview.iterrows():
         joined = " ".join(row.fillna("").astype(str).str.strip().tolist())
-        if any(keyword in joined for keyword in ["캠페인", "노출", "클릭", "일자", "날짜"]):
+        if any(keyword in joined for keyword in keywords):
             return idx
     return 0
 
 
 @st.cache_data(show_spinner=False)
+def load_conversion_file(file_bytes: bytes, file_name: str) -> pd.DataFrame:
+    extension = file_name.lower().split(".")[-1]
+    try:
+        if extension == "csv":
+            return pd.read_csv(io.BytesIO(file_bytes))
+        if extension in {"xls", "xlsx"}:
+            header_row = detect_excel_header_row(file_bytes, ["캠페인", "방문", "구매", "매출"])
+            return pd.read_excel(io.BytesIO(file_bytes), header=header_row)
+    except Exception as error:
+        raise ValueError("전환/매출 파일을 읽지 못했습니다. csv 또는 xls/xlsx 형식을 확인해주세요.") from error
+    raise ValueError("전환/매출 파일은 csv 또는 xls/xlsx 형식만 지원합니다.")
+
+
+@st.cache_data(show_spinner=False)
 def load_ad_excel(file_bytes: bytes) -> pd.DataFrame:
     try:
-        header_row = detect_excel_header_row(file_bytes)
+        header_row = detect_excel_header_row(file_bytes, ["캠페인", "노출", "클릭", "일자", "날짜"])
         return pd.read_excel(io.BytesIO(file_bytes), header=header_row)
     except Exception as error:
         raise ValueError("일별 광고 xls/xlsx 파일을 읽지 못했습니다. 파일 형식과 헤더 행을 확인해주세요.") from error
@@ -584,20 +598,20 @@ def main() -> None:
 
     with st.sidebar:
         st.markdown("### 📂 데이터 업로드")
-        conversion_file = st.file_uploader("전환/매출 데이터 업로드 (CSV)", type=["csv"])
+        conversion_file = st.file_uploader("전환/매출 데이터 업로드 (CSV, XLS, XLSX)", type=["csv", "xls", "xlsx"])
         ad_file = st.file_uploader("일별 광고 데이터 업로드 (XLS, XLSX)", type=["xls", "xlsx"])
         st.markdown("### ⚙️ 보고 설정")
         top_n = st.slider("차트 TOP N", min_value=5, max_value=20, value=10)
 
     if conversion_file is None or ad_file is None:
-        info_box("전환/매출 csv 파일과 일별 광고 xls/xlsx 파일을 모두 업로드해주세요.")
+        info_box("전환/매출 csv/xls/xlsx 파일과 일별 광고 xls/xlsx 파일을 모두 업로드해주세요.")
         st.warning("두 파일이 모두 업로드되기 전에는 전처리와 분석을 실행하지 않습니다.")
         st.stop()
 
     try:
         with st.status("분석 준비 중...", expanded=True) as status:
             status.write("파일 로드 중")
-            conversion_raw = load_conversion_csv(conversion_file.getvalue())
+            conversion_raw = load_conversion_file(conversion_file.getvalue(), conversion_file.name)
             ad_raw = load_ad_excel(ad_file.getvalue())
 
             status.write("광고 데이터 전처리 중")
